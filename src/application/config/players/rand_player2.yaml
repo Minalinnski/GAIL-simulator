@@ -1,0 +1,23 @@
+# Random Player Configuration
+player_id: "random_player2"
+initial_balance: 5000.0
+currency: "CNY"
+active_lines: null  # Use all available paylines
+
+# Model Version - determines which implementation to use
+model_version: "random"
+
+# Configuration for the random model implementation
+model_config_random:
+  min_delay: 5.0         # Minimum seconds between spins
+  max_delay: 10.0         # Maximum seconds between spins
+  end_probability: -1  # Chance to end session on each spin
+  max_consecutive_losses: 25  # End after this many consecutive losses
+  session_budget: 1000   # Maximum loss per session
+  max_session_duration: 1800  # Maximum session duration in seconds
+  max_spins_per_session: 500  # Maximum spins per session
+  seed: 12345  # Optional for reproducible results
+
+# Session limits
+max_session_duration: 3600  # 1 hour
+max_spins_per_session: 10000

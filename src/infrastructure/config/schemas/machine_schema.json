@@ -1,0 +1,121 @@
+{
+    "type": "object",
+    "required": ["machine_id", "reels", "paylines", "pay_table", "bet_table"],
+    "properties": {
+        "machine_id": {"type": "string"},
+        "free_spins": {
+            "type": "integer",
+            "minimum": 1, 
+            "default": 10
+        },
+        "free_spins_multiplier": {
+            "type": "number", 
+            "minimum": 1, 
+            "default": 1.0
+        },
+        "symbols": {
+            "type": "object",
+            "properties": {
+                "normal": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "default": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+                },
+                "wild": {
+                    "type": "array",
+                    "items": { "type": "integer" },
+                    "default": [101]
+                },
+                "scatter": {
+                    "type": "integer",
+                    "default": 20
+                }
+            }
+        },
+        "reels": {
+            "type": "object",
+            "required": ["normal", "bonus"],
+            "properties": {
+                "normal": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "patternProperties": {
+                        "^(?!_).*$": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "minItems": 1
+                        },
+                        "^_.*$": {}
+                    }
+                },
+                "bonus": {
+                    "type": "object",
+                    "patternProperties": {
+                        "^(?!_).*$": {
+                            "type": "array",
+                            "items": {"type": "integer"},
+                            "minItems": 1
+                        },
+                        "^_.*$": {}
+                    }
+                }
+            },
+            "additionalProperties": {
+                "type": "object",
+                "patternProperties": {
+                    "^(?!_).*$": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "minItems": 1
+                    },
+                    "^_.*$": {}
+                }
+            }
+        },
+        "paylines": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["indices"],
+                "properties": {
+                    "indices": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "minItems": 5
+                    },
+                    "_comment": {"type": "string"}
+                }
+            }
+        },
+        "pay_table": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["symbol", "payouts"],
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "payouts": {
+                        "type": "array", 
+                        "items": {"type": "number"}, 
+                        "minItems": 3
+                    }
+                }
+            }
+        },
+        "bet_table": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["currency", "bet_options"],
+                "properties": {
+                    "currency": {"type": "string"},
+                    "bet_options": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 1
+                    }
+                }
+            }
+        }
+    }
+}

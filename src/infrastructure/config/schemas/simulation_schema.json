@@ -1,0 +1,395 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Simulation Configuration Schema",
+  "description": "Schema for validating simulation configurations",
+  "type": "object",
+  "properties": {
+    "file_configs": {
+      "type": "object",
+      "description": "Configuration for machine and player files",
+      "properties": {
+        "machines": {
+          "type": "object",
+          "description": "Machine file configuration",
+          "properties": {
+            "dir": {
+              "type": "string",
+              "description": "Directory containing machine configurations"
+            },
+            "selection": {
+              "type": "object",
+              "description": "Machine file selection options",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "description": "Selection mode for machine files",
+                  "enum": ["all", "include", "exclude"],
+                  "default": "all"
+                },
+                "files": {
+                  "type": "array",
+                  "description": "List of filenames to include or exclude based on mode",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["dir"],
+          "additionalProperties": false
+        },
+        "players": {
+          "type": "object",
+          "description": "Player file configuration",
+          "properties": {
+            "dir": {
+              "type": "string",
+              "description": "Directory containing player configurations"
+            },
+            "selection": {
+              "type": "object",
+              "description": "Player file selection options",
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "description": "Selection mode for player files",
+                  "enum": ["all", "include", "exclude"],
+                  "default": "all"
+                },
+                "files": {
+                  "type": "array",
+                  "description": "List of filenames to include or exclude based on mode",
+                  "items": {
+                    "type": "string"
+                  },
+                  "default": []
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": ["dir"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["machines", "players"],
+      "additionalProperties": false
+    },
+    "initial_balance": {
+      "type": "number",
+      "description": "Starting balance for all players",
+      "minimum": 0
+    },
+    "sessions_per_pair": {
+      "type": "integer",
+      "description": "Number of sessions per player-machine pair",
+      "minimum": 1,
+      "default": 1
+    },
+    "batch_size": {
+      "type": "integer",
+      "description": "Number of sessions per batch",
+      "minimum": 1,
+      "default": 100
+    },
+    "use_concurrency": {
+      "type": "boolean",
+      "description": "Whether to use concurrent execution",
+      "default": true
+    },
+    "max_spins": {
+      "type": "integer",
+      "description": "Maximum number of spins per session",
+      "minimum": 1,
+      "default": 10000
+    },
+    "max_sim_duration": {
+      "type": "number",
+      "description": "Maximum simulation duration in seconds",
+      "minimum": 0,
+      "default": 300
+    },
+    "max_player_duration": {
+      "type": "number",
+      "description": "Maximum player logical time in seconds",
+      "minimum": 0,
+      "default": 7200
+    },
+    "rng": {
+      "type": "object",
+      "description": "RNG configuration",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "description": "RNG strategy to use",
+          "enum": ["mersenne", "numpy"],
+          "default": "mersenne"
+        },
+        "seed": {
+          "type": ["integer", "null"],
+          "description": "Optional seed for reproducibility"
+        }
+      },
+      "additionalProperties": false
+    },
+    "logging": {
+      "type": "object",
+      "description": "Logging configuration",
+      "properties": {
+        "level": {
+          "type": "string",
+          "description": "Root log level",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+          "default": "INFO"
+        },
+        "console": {
+          "type": "boolean",
+          "description": "Whether to log to console",
+          "default": true
+        },
+        "console_level": {
+          "type": "string",
+          "description": "Console log level",
+          "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+          "default": "INFO"
+        },
+        "file": {
+          "type": "object",
+          "description": "File logging configuration",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether to log to file",
+              "default": true
+            },
+            "path": {
+              "type": "string",
+              "description": "Log file path",
+              "default": "logs/simulator.log"
+            },
+            "level": {
+              "type": "string",
+              "description": "File log level",
+              "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+              "default": "DEBUG"
+            },
+            "max_bytes": {
+              "type": "integer",
+              "description": "Maximum log file size in bytes",
+              "minimum": 1024,
+              "default": 10485760
+            },
+            "backup_count": {
+              "type": "integer",
+              "description": "Number of backup log files",
+              "minimum": 0,
+              "default": 5
+            }
+          },
+          "additionalProperties": false
+        },
+        "loggers": {
+          "type": "object",
+          "description": "Specific logger configurations",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "level": {
+                "type": "string",
+                "description": "Log level for this logger",
+                "enum": ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "description": "Output configuration",
+      "properties": {
+        "directories": {
+          "type": "object",
+          "properties": {
+            "base_dir": {
+              "type": "string",
+              "default": "results"
+            },
+            "use_simulation_subdir": {
+              "type": "boolean",
+              "default": true
+            },
+            "simulation_dir_format": {
+              "type": "string",
+              "default": "sim_{timestamp}"
+            },
+            "timestamp_format": {
+              "type": "string",
+              "default": "%Y%m%d-%H%M%S"
+            }
+          }
+        },
+        "session_recording": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "record_spins": {
+              "type": "boolean",
+              "default": true
+            },
+            "max_batch_size": {
+              "type": "integer",
+              "default": 100
+            },
+            "write_batches": {
+              "type": "boolean",
+              "default": true
+            },
+            "lru_max_size": {
+              "type": "integer",
+              "default": 1000
+            },
+            "compress_batches": {
+              "type": "boolean",
+              "default": false
+            },
+            "record_line_wins": {
+              "type": "boolean",
+              "default": false
+            },
+            "file_format": {
+              "type": "string",
+              "enum": ["json", "csv"],
+              "default": "json"
+            }
+          }
+        },
+        "reports": {
+          "type": "object",
+          "properties": {
+            "generate_reports": {
+              "type": "boolean",
+              "default": true
+            },
+            "include": {
+              "type": "object",
+              "properties": {
+                "summary_report": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "detailed_session_report": {
+                  "type": "boolean",
+                  "default": false
+                },
+                "player_preference_report": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "machine_performance_report": {
+                  "type": "boolean",
+                  "default": true
+                }
+              }
+            }
+          }
+        },
+        "show_progress": {
+          "type": "boolean",
+          "default": true
+        },
+        "auto_cleanup": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "description": "Analysis configuration",
+      "properties": {
+        "generate_reports": {
+          "type": "boolean",
+          "description": "Whether to generate reports",
+          "default": true
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "Directory for report output",
+          "default": "reports"
+        },
+        "report_formats": {
+          "type": "array",
+          "description": "Report formats to generate",
+          "items": {
+            "type": "string",
+            "enum": ["json", "yaml", "csv", "html"]
+          },
+          "default": ["json"]
+        },
+        "metrics": {
+          "type": "array",
+          "description": "Metrics to include in analysis",
+          "items": {
+            "type": "string"
+          }
+        },
+        "include": {
+          "type": "object",
+          "properties": {
+            "summary_report": {
+              "type": "boolean",
+              "default": true
+            },
+            "player_preference_report": {
+              "type": "boolean",
+              "default": true
+            },
+            "machine_performance_report": {
+              "type": "boolean",
+              "default": true
+            },
+            "detailed_session_report": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "pairings": {
+      "type": "array",
+      "description": "Specific player-machine pairings",
+      "items": {
+        "type": "object",
+        "required": ["player_id", "machine_id"],
+        "properties": {
+          "player_id": {
+            "type": "string",
+            "description": "Player ID"
+          },
+          "machine_id": {
+            "type": "string",
+            "description": "Machine ID"
+          },
+          "sessions": {
+            "type": "integer",
+            "description": "Number of sessions for this pairing",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": true
+}
