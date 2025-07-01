@@ -32,8 +32,8 @@ model_config_v1:
   default_delay: 1.0
   
   # 会话控制
-  max_session_duration: 3600  # 最大会话时长（秒）
-  max_spins_per_session: 500  # 最大旋转次数
+  max_session_duration: 386400600  # 最大会话时长（秒）
+  max_spins_per_session: 15000  # 最大旋转次数
 
   first_bet_mapping:
     0.5: 3788684

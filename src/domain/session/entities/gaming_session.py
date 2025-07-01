@@ -260,10 +260,10 @@ class GamingSession:
         # 计算当前streak
         streak = 0
         if len(self.spins) > 0:
-            prev_win = self.spins[-1].payout > 0
+            prev_win = self.spins[-1].get('payout', 0) > 0
             curr_win = win_amount > 0
             if curr_win == prev_win:
-                streak = self.spins[-1].streak
+                streak = self.spins[-1].get('streak', 0)
                 streak = streak + 1 if curr_win else streak - 1
             else:
                 streak = 1 if curr_win else -1
@@ -311,18 +311,26 @@ class GamingSession:
             
         return result_dict
 
-    # 新增：session结束时写入数据
     def _write_session_data(self):
         """会话结束时写入数据文件"""
         if not self.output_manager:
+            self.logger.warning("No output_manager, skipping data write")
             return
             
+        self.logger.debug(f"Writing session data for {self.id}")
+        
         # 写入session统计摘要
         self._write_session_summary()
         
         # 写入原始spin数据为CSV
         if self.should_record_spins and self.spins:
+            self.logger.debug(f"Writing raw spins data: {len(self.spins)} spins for session {self.id}")
             self._write_raw_spins_csv()
+        else:
+            if not self.should_record_spins:
+                self.logger.debug(f"Skipping raw spins data: record_spins disabled for session {self.id}")
+            if not self.spins:
+                self.logger.debug(f"Skipping raw spins data: no spins data for session {self.id}")
 
     # 移除原来的_flush_batch方法，替换为简单的写入方法
         
@@ -337,10 +345,18 @@ class GamingSession:
     def _write_raw_spins_csv(self):
         """写入原始spin数据为CSV格式"""
         if not self.output_manager or not self.spins:
+            self.logger.warning(f"Cannot write raw spins: output_manager={bool(self.output_manager)}, spins_count={len(self.spins) if self.spins else 0}")
             return
             
+        self.logger.debug(f"Calling output_manager.write_session_raw_data_csv for session {self.id}")
+        
         # 写入CSV格式的原始数据
-        self.output_manager.write_session_raw_data_csv(self.id, self.spins)
+        filepath = self.output_manager.write_session_raw_data_csv(self.id, self.spins)
+        
+        if filepath:
+            self.logger.debug(f"Successfully wrote raw data to: {filepath}")
+        else:
+            self.logger.error(f"Failed to write raw data for session {self.id}")
         
     def get_statistics(self) -> Dict[str, Any]:
         """
