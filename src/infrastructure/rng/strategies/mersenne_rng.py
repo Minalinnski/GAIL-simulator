@@ -15,7 +15,7 @@ class MersenneTwisterRNG:
             seed_value: Optional seed value for reproducible random numbers
         """
         # Create a dedicated random instance to avoid global state issues
-        self._random = random.Random()
+        self.rng = random.Random()
         
         # Set seed if provided
         if seed_value is not None:
@@ -32,7 +32,7 @@ class MersenneTwisterRNG:
         Returns:
             Random integer in the specified range
         """
-        return self._random.randint(min_val, max_val)
+        return self.rng.randint(min_val, max_val)
     
     def get_random_float(self, min_val: float, max_val: float) -> float:
         """
@@ -45,7 +45,7 @@ class MersenneTwisterRNG:
         Returns:
             Random float in the specified range
         """
-        return self._random.uniform(min_val, max_val)
+        return self.rng.uniform(min_val, max_val)
     
     def get_batch_ints(self, min_val: int, max_val: int, count: int) -> List[int]:
         """
@@ -59,7 +59,7 @@ class MersenneTwisterRNG:
         Returns:
             List of random integers
         """
-        return [self._random.randint(min_val, max_val) for _ in range(count)]
+        return [self.rng.randint(min_val, max_val) for _ in range(count)]
     
     def seed(self, seed_value: int) -> None:
         """
@@ -68,7 +68,7 @@ class MersenneTwisterRNG:
         Args:
             seed_value: Seed value to use
         """
-        self._random.seed(seed_value)
+        self.rng.seed(seed_value)
         
     def choice(self, items: List[Any]) -> Any:
         """
@@ -85,7 +85,7 @@ class MersenneTwisterRNG:
         """
         if not items:
             raise IndexError("Cannot choose from an empty list")
-        return self._random.choice(items)
+        return self.rng.choice(items)
     
     def shuffle(self, items: List[Any]) -> List[Any]:
         """
@@ -99,5 +99,8 @@ class MersenneTwisterRNG:
         """
         # Create a copy to avoid modifying the original
         items_copy = items.copy()
-        self._random.shuffle(items_copy)
+        self.rng.shuffle(items_copy)
         return items_copy
+
+    def normal(self, mean, stddev):
+        return self.rng.normalvariate(mean, stddev)

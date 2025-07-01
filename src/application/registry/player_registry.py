@@ -12,20 +12,22 @@ class PlayerRegistry:
     Registry for player instances.
     Combines aspects of repository and factory to manage player lifecycle.
     """
-    def __init__(self, config_loader, player_factory: Optional[PlayerFactory] = None):
+    def __init__(self, config_loader, player_factory: Optional[PlayerFactory] = None,
+                rng_provider=None):
         """
         Initialize the player registry.
         
         Args:
             config_loader: Configuration loader for player configs
             player_factory: Optional player factory (created if not provided)
+            rng_provider: Optional RNG provider for machine instances
         """
         self.logger = logging.getLogger("application.registry.player")
         self.config_loader = config_loader
         
         # Create factory if not provided
         if player_factory is None:
-            self.player_factory = PlayerFactory()
+            self.player_factory = PlayerFactory(rng_provider)
         else:
             self.player_factory = player_factory
             

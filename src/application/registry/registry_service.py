@@ -25,7 +25,7 @@ class RegistryService:
         
         # Create registries
         self.machine_registry = MachineRegistry(config_loader, rng_provider=rng_provider)
-        self.player_registry = PlayerRegistry(config_loader)
+        self.player_registry = PlayerRegistry(config_loader, rng_provider=rng_provider)
         
         self.logger.info("Registry service initialized")
         

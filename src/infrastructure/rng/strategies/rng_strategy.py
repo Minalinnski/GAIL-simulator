@@ -1,5 +1,6 @@
 # src/infrastructure/rng/strategies/rng_strategy.py
 from typing import List, Protocol, Optional, TypeVar, Any
+from abc import ABC, abstractmethod
 
 
 class RNGStrategy(Protocol):
@@ -76,4 +77,9 @@ class RNGStrategy(Protocol):
         Returns:
             Shuffled list (may modify original list)
         """
+        pass
+
+    @abstractmethod
+    def normal(self, mean, stddev):
+        """Return a random float sampled from N(mean, stddev)."""
         pass

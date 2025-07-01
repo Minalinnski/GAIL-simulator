@@ -107,3 +107,6 @@ class NumpyRNG:
         
         # Convert back to list
         return items_array.tolist()
+
+    def normal(self, mean, stddev):
+        return self.rng.normal(mean, stddev)

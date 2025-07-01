@@ -131,6 +131,8 @@ class SimulationCoordinator:
         # 生成报告
         self._generate_reports()
 
+        self._generate_player_machine_summaries()
+
         return self.results
     
     
@@ -291,6 +293,125 @@ class SimulationCoordinator:
                 self.results.get("preference_analysis", {})
             )
             self.logger.info(f"Generated detailed report: {detailed_path}")
+
+    def _generate_player_machine_summaries(self):
+        """
+        为每个玩家-机器对生成汇总统计。
+        利用现有的 output_manager 而不是重新初始化。
+        """
+        if not self.output_manager:
+            return
+            
+        self.logger.info("Generating player-machine summaries")
+        
+        # 按玩家-机器对分组会话
+        player_machine_sessions = {}
+        
+        for session in self.results["sessions"]:
+            player_id = session.get("player_id", "unknown")
+            machine_id = session.get("machine_id", "unknown")
+            key = f"{player_id}_{machine_id}"
+            
+            if key not in player_machine_sessions:
+                player_machine_sessions[key] = []
+            player_machine_sessions[key].append(session)
+        
+        # 为每个玩家-机器对生成汇总
+        for key, sessions in player_machine_sessions.items():
+            if not sessions:
+                continue
+                
+            parts = key.split('_', 1)
+            if len(parts) == 2:
+                player_id, machine_id = parts
+            else:
+                continue
+            
+            # 计算汇总统计
+            summary = self._calculate_player_machine_summary(player_id, machine_id, sessions)
+            
+            # 写入汇总文件（使用现有的output_manager）
+            self.output_manager.append_player_machine_session_summary(
+                player_id, machine_id, summary
+            )
+        
+        self.logger.info(f"Generated summaries for {len(player_machine_sessions)} player-machine pairs")
+
+    def _calculate_player_machine_summary(self, player_id: str, machine_id: str, 
+                                        sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        计算玩家-机器对的汇总统计。
+        
+        Args:
+            player_id: 玩家ID
+            machine_id: 机器ID
+            sessions: 该玩家-机器对的所有会话
+            
+        Returns:
+            汇总统计字典
+        """
+        if not sessions:
+            return {}
+        
+        # 聚合统计
+        total_sessions = len(sessions)
+        total_spins = sum(s.get("total_spins", 0) for s in sessions)
+        total_bet = sum(s.get("total_bet", 0.0) for s in sessions)
+        total_win = sum(s.get("total_win", 0.0) for s in sessions)
+        total_duration = sum(s.get("duration", 0.0) for s in sessions)
+        
+        # 计算平均值
+        avg_session_duration = total_duration / total_sessions
+        avg_spins_per_session = total_spins / total_sessions
+        avg_bet_per_spin = total_bet / total_spins if total_spins > 0 else 0.0
+        
+        # RTP计算
+        overall_rtp = total_win / total_bet if total_bet > 0 else 0.0
+        
+        # 胜率计算
+        total_wins = sum(s.get("win_count", 0) for s in sessions)
+        overall_win_rate = total_wins / total_spins if total_spins > 0 else 0.0
+        
+        # 免费旋转统计
+        total_free_spins = sum(s.get("free_spins_count", 0) for s in sessions)
+        total_big_wins = sum(s.get("big_win_count", 0) for s in sessions)
+        
+        # 余额变化
+        balance_changes = [s.get("balance_change", 0.0) for s in sessions if "balance_change" in s]
+        avg_balance_change = sum(balance_changes) / len(balance_changes) if balance_changes else 0.0
+        
+        return {
+            "player_id": player_id,
+            "machine_id": machine_id,
+            "summary_generated_at": time.time(),
+            "session_count": total_sessions,
+            "total_spins": total_spins,
+            "total_bet": total_bet,
+            "total_win": total_win,
+            "total_profit": total_win - total_bet,
+            "overall_rtp": overall_rtp,
+            "overall_win_rate": overall_win_rate,
+            "total_duration": total_duration,
+            "avg_session_duration": avg_session_duration,
+            "avg_spins_per_session": avg_spins_per_session,
+            "avg_bet_per_spin": avg_bet_per_spin,
+            "avg_balance_change": avg_balance_change,
+            "total_free_spins_awarded": total_free_spins,
+            "total_big_wins": total_big_wins,
+            "free_spins_frequency": total_free_spins / total_spins if total_spins > 0 else 0.0,
+            "big_win_frequency": total_big_wins / total_spins if total_spins > 0 else 0.0,
+            "sessions": [
+                {
+                    "session_id": s.get("session_id"),
+                    "duration": s.get("duration", 0.0),
+                    "total_spins": s.get("total_spins", 0),
+                    "total_bet": s.get("total_bet", 0.0),
+                    "total_win": s.get("total_win", 0.0),
+                    "rtp": s.get("return_to_player", 0.0),
+                    "balance_change": s.get("balance_change", 0.0)
+                } for s in sessions
+            ]
+        }
         
     def get_results(self) -> Dict[str, Any]:
         """

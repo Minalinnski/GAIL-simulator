@@ -6,26 +6,27 @@ file_configs:
   machines:
     dir: "src/application/config/machines"
     selection:
-      mode: "all"  # Options: "all", "include", "exclude"
+      mode: "exclude"  # Options: "all", "include", "exclude"
       files:  # List of filenames to include or exclude based on mode
-        - "machine_001.yaml"
-        - "machine_002.yaml"
+        - "default_machine.yaml"
+        - "risky.yaml"
         # Add more machine files as needed
   players:
     dir: "src/application/config/players"
     selection:
-      mode: "all"  # Options: "all", "include", "exclude"
+      mode: "include"  # Options: "all", "include", "exclude"
       files:
-        - "player_type_a.yaml"
-        - "player_type_b.yaml"
+        # - "v1_player_cluster0.yaml"
+        # - "v1_player_cluster1.yaml"
+        - "v1_player_cluster2.yaml"
         # Add more player files as needed
 
 # Simulation parameters
-max_spins: 10000          # 每个会话最大旋转次数
+max_spins: 15000          # 每个会话最大旋转次数
 max_sim_duration: 300     # 模拟器运行最大时长(秒)
-max_player_duration: 7200 # 玩家逻辑时间最大值(秒)
+max_player_duration:  86400 # 玩家逻辑时间最大值(秒)
 initial_balance: 5000.0
-sessions_per_pair: 10
+sessions_per_pair: 1000
 use_concurrency: true
 
 # 输出配置
@@ -34,31 +35,35 @@ output:
   directories:
     base_dir: "results"                       # 基础输出目录
     use_simulation_subdir: true               # 是否为每次模拟创建子目录
-    simulation_dir_format: "sim_{name}_{timestamp}"  # 模拟目录名格式
+    simulation_dir_format: "sim_{timestamp}"  # 模拟目录名格式
     timestamp_format: "%Y%m%d-%H%M%S"         # 时间戳格式
-    simulation_name: "test"
+    # simulation_name: "test"
   
   # 会话数据记录
+  # session_recording:
+  #   enabled: true                      # 是否记录会话数据
+  #   record_spins: true                 # 是否记录旋转详情
+  #   write_batches: true                # 是否写入批次文件
+  #   lru_max_size: 1000                 # lru
+  #   batch_size: 200                    # 批处理大小
+  #   compress_batches: false            # 是否压缩批次文件
+  #   record_line_wins: false            # 是否记录详细的线赢信息
+  #   file_format: "json"                # 文件格式 (json, csv)
+  #   # 高级统计配置
+  #   advanced_statistics:
+  #     enabled: true                    # 是否启用高级统计
+  #     include_in_summary: true         # 是否在会话摘要中包含
+  #     include_in_reports: true         # 是否在报告中包含
+  #     modules:
+  #       bet: true          # 投注统计
+  #       win: true       # 赢额统计(直接赢金)
+  #       profit: true       # 净胜统计
+  #       odds: true         # 赔率统计
+  #       balance: false     # 余额统计
   session_recording:
-    enabled: true                      # 是否记录会话数据
-    record_spins: true                 # 是否记录旋转详情
-    write_batches: true                # 是否写入批次文件
-    lru_max_size: 1000                 # lru
-    batch_size: 200                    # 批处理大小
-    compress_batches: false            # 是否压缩批次文件
-    record_line_wins: false            # 是否记录详细的线赢信息
-    file_format: "json"                # 文件格式 (json, csv)
-    # 高级统计配置
-    advanced_statistics:
-      enabled: true                    # 是否启用高级统计
-      include_in_summary: true         # 是否在会话摘要中包含
-      include_in_reports: true         # 是否在报告中包含
-      modules:
-        bet: true          # 投注统计
-        win: true       # 赢额统计(直接赢金)
-        profit: true       # 净胜统计
-        odds: true         # 赔率统计
-        balance: false     # 余额统计
+    enabled: true
+    record_spins: true
+    file_format: "csv"
   
   reports:
     generate_reports: true
@@ -93,7 +98,7 @@ logging:
       level: "WARNING"  # 或 "ERROR"，只显示警告或错误
       propagate: true
     application:
-      level: "DEBUG"
+      level: "INFO"
       propagate: true
     infrastructure:
       level: "INFO"

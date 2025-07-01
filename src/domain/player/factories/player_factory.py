@@ -10,12 +10,14 @@ class PlayerFactory:
     """
     Factory for creating Player instances.
     """
-    def __init__(self):
+    def __init__(self, rng_provider=None):
         """Initialize the player factory."""
         self.logger = logging.getLogger("domain.player.factory")
+        self.rng_provider = rng_provider
         
     def create_player(self, player_id: str, config: Dict[str, Any], 
-                     initial_balance: Optional[float] = None) -> Player:
+                     initial_balance: Optional[float] = None,
+                     rng_strategy_name: str = "mersenne") -> Player:
         """
         Create a new player instance.
         
@@ -23,6 +25,7 @@ class PlayerFactory:
             player_id: Unique identifier for the player
             config: Player configuration dictionary
             initial_balance: Optional starting balance (overrides config)
+            rng_strategy_name: Name of RNG strategy to use
             
         Returns:
             Initialized Player instance
@@ -32,11 +35,21 @@ class PlayerFactory:
         # Get initial balance from config or parameter
         if initial_balance is None:
             initial_balance = config.get("initial_balance", 1000.0)
+
+        # Get RNG strategy if provider available
+        rng_strategy = None
+        if self.rng_provider:
+            # Get RNG seed from config if specified
+            rng_seed = config.get("rng_seed", None)
+            
+            # Create RNG strategy
+            rng_strategy = self.rng_provider.get_rng(rng_strategy_name, rng_seed)
+            self.logger.debug(f"Using RNG strategy: {rng_strategy_name}, seed: {rng_seed}")
+        else:
+            self.logger.warning("No RNG provider available, machine will need RNG set later")
         
         # Create player instance
-        player = Player(player_id, config, initial_balance)
-        
-        return player
+        return Player(player_id, config, initial_balance, rng_strategy)
         
     def create_player_from_file(self, config_loader, file_path: str, 
                               player_id: Optional[str] = None,

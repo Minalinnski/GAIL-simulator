@@ -1,0 +1,6 @@
+# V1模型新增依赖
+torch
+stable-baselines3
+scikit-learn
+gymnasium
+giotto-tda

@@ -1,0 +1,22 @@
+{
+  "training_completed": "2025-06-24T17:43:23.598584",
+  "prediction_method": 2,
+  "target_termination_ratio": 0.18,
+  "final_model_path": "weights/termination_25_model_01.pth",
+  "data_info": {
+    "train_samples": 4366288,
+    "test_samples": 1091572,
+    "state_dim": 8,
+    "train_termination_ratio": 0.014917247785762186,
+    "test_termination_ratio": 0.015073673564364055
+  },
+  "training_params": {
+    "epochs": 130,
+    "batch_size": 255,
+    "learning_rate": 9e-05,
+    "hidden_dims": [
+      512
+    ],
+    "weight_decay": 1e-10
+  }
+}
