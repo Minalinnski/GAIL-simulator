@@ -8,6 +8,7 @@ import csv
 from datetime import datetime
 from typing import Dict, List, Any, Optional, IO, Tuple
 
+from .s3_service import S3Service
 
 class OutputManager:
     """
@@ -29,6 +30,12 @@ class OutputManager:
                 "use_simulation_subdir": True,
                 "simulation_dir_format": "sim_{timestamp}",
                 "timestamp_format": "%Y%m%d-%H%M%S",
+            },
+            "s3":{
+                "use_s3": False,
+                "bucket": "bituslabs-team-ai",  # S3 Bucket 名称
+                "region": "us-west-2",        # Bucket 所在区域
+                "prefix": "gail_simulator_data_raw",
             },
             "session_recording": {
                 "enabled": True,
@@ -57,7 +64,9 @@ class OutputManager:
         self.config = default_config
         if config:
             self._merge_config(self.config, config)
-            
+        
+        self.s3 = None
+        
         # 当前任务目录
         self.task_dir = None
         self.initialized = False
@@ -109,7 +118,15 @@ class OutputManager:
             
         else:
             self.task_dir = base_dir
-            
+
+        if self.config["s3"]["use_s3"]:
+            self.logger.info(f"s3 client Initialized")
+            self.s3 = S3Service(
+                region=self.config["s3"]["region"],
+                bucket=self.config["s3"]["bucket"],
+                prefix=self.config["s3"]["prefix"]
+            )
+
         self.initialized = True
         self.logger.info(f"Output structure initialized at {self.task_dir}")
         
@@ -280,7 +297,22 @@ class OutputManager:
                     writer.writerow(row_data)
                     
             self.logger.debug(f"Wrote {len(spins_data)} spin records to {filepath}")
-            return filepath
+
+            if self.s3:
+                rel_path = os.path.relpath(filepath, self.task_dir)
+                self.s3.upload_file(filepath, os.path.join(self.task_dir, rel_path))
+                self.logger.info(f"Uploaded raw data CSV to S3: {rel_path}")
+
+                # 删除本地文件
+                try:
+                    os.remove(filepath)
+                    self.logger.debug(f"Deleted local raw data CSV: {filepath}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to delete local file {filepath}: {str(e)}")
+
+                return rel_path  # 返回 s3 相对路径
+            else:
+                return filepath
             
         except Exception as e:
             self.logger.error(f"Error writing CSV file {filepath}: {str(e)}")
@@ -393,7 +425,11 @@ class OutputManager:
                     writer.writerow(row_data)
             
             self.logger.info(f"Merged {len(all_summaries)} summaries to {csv_filepath}")
-            
+            if self.s3:
+                rel_path = os.path.relpath(csv_filepath, self.task_dir)
+                self.s3.upload_file(filepath, os.path.join(self.task_dir, rel_path))
+                self.logger.info(f"Uploaded merged summary CSV to S3: {rel_path}")
+
             # 删除临时文件
             for temp_file in temp_files:
                 try:

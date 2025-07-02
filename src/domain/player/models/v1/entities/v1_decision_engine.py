@@ -44,15 +44,24 @@ class V1DecisionEngine(BaseDecisionEngine):
     def _init_first_bet_amount(self):
         try:
             first_bet_config = self.config.get("first_bet_mapping", {})
-
             if not first_bet_config:
                 raise ValueError(f"V1决策引擎 - Cluster {self.cluster_id} - bet mapping not found!")
-            
-            items = list(first_bet_config.keys())
-            weights = list(first_bet_config.values())
+
+            # 过滤可负担的 bet
+            affordable_items = [(float(k), v) for k, v in first_bet_config.items() if float(k) <= self.player.balance]
+            if not affordable_items:
+                self.logger.warning(f"首次投注预计算: balance {self.player.balance} 不足以负担任何 bet, 使用最小 bet")
+                min_bet = min(float(k) for k in first_bet_config.keys())
+                return min_bet
+
+            items = [str(k) for k, v in affordable_items]
+            weights = [v for k, v in affordable_items]
+
             first_bet = random.choices(items, weights=weights, k=1)[0]
+            first_bet = float(first_bet)  # 确保返回数值
             self.logger.info(f"首次投注预计算完成: {first_bet}")
             return first_bet
+
         except Exception as e:
             self.logger.warning(f"首次投注预计算失败: {e}, 使用默认值1.0")
             return 1.0

@@ -1,136 +1,109 @@
 # src/infrastructure/concurrency/task_executor.py
+# 增强版本 - 支持更高效的异步执行和动态调优
+
 import logging
-from typing import List, Callable, Any, TypeVar, Dict, Optional, Union
 from enum import Enum, auto
+from typing import List, Callable, TypeVar, Any
 
-# Import pool implementations
-from .thread_pool import ThreadPool
-from .process_pool import ProcessPool
+from src.infrastructure.concurrency.process_pool import ProcessPool
+from src.infrastructure.concurrency.thread_pool import ThreadPool
 
-T = TypeVar('T')  # Return type of tasks
+T = TypeVar("T")
 
 class ExecutionMode(Enum):
-    """Execution modes for the task executor."""
-    SEQUENTIAL = auto()  # Execute tasks one at a time
-    THREADED = auto()    # Execute tasks in parallel using threads
-    MULTIPROCESS = auto() # Execute tasks in parallel using processes
-
+    SEQUENTIAL = auto()
+    MULTITHREAD = auto()
+    MULTIPROCESS = auto()
 
 class TaskExecutor:
-    """
-    Unified interface for executing tasks in different concurrency modes.
-    """
-    def __init__(self, mode: ExecutionMode = ExecutionMode.THREADED, 
-                max_workers: Optional[int] = None):
-        """
-        Initialize the task executor.
-        
-        Args:
-            mode: Execution mode (sequential, threaded, multiprocess)
-            max_workers: Maximum number of workers (default: CPU count)
-        """
-        self.logger = logging.getLogger(__name__)
+    def __init__(self, mode: ExecutionMode, max_workers: int = None):
         self.mode = mode
         self.max_workers = max_workers
+        self.logger = logging.getLogger("infrastructure.task_executor")
         
-        # Initialize the appropriate executor based on mode
-        if mode == ExecutionMode.THREADED:
-            self.pool = ThreadPool(max_workers=max_workers)
-        elif mode == ExecutionMode.MULTIPROCESS:
-            self.pool = ProcessPool(max_workers=max_workers)
+        if self.mode == ExecutionMode.MULTITHREAD:
+            self.pool = ThreadPool(max_workers)
+        elif self.mode == ExecutionMode.MULTIPROCESS:
+            self.pool = ProcessPool(max_workers)
         else:
-            self.pool = None  # No pool needed for sequential execution
-            
-        self.logger.info(f"Initialized TaskExecutor in {mode.name} mode")
-        
+            self.pool = None
+
     def execute(self, tasks: List[Callable[[], T]]) -> List[T]:
-        """
-        Execute a list of tasks using the configured execution mode.
-        
-        Args:
-            tasks: List of callable tasks (functions with no parameters)
-            
-        Returns:
-            List of results in the order tasks were submitted
-        """
         task_count = len(tasks)
-        self.logger.debug(f"Executing {task_count} tasks in {self.mode.name} mode")
+        self.logger.info(f"Executing {task_count} tasks in {self.mode.name} mode")
         
         if self.mode == ExecutionMode.SEQUENTIAL:
-            # Execute tasks sequentially
+            return [task() for task in tasks]
+        else:
+            return self.pool.execute_tasks(tasks)
+
+    def execute_with_progress(self, tasks: List[Callable[[], T]], progress_callback: Callable[[int, int], Any] = None) -> List[T]:
+        task_count = len(tasks)
+        self.logger.info(f"Executing {task_count} tasks with progress in {self.mode.name} mode")
+        
+        if self.mode == ExecutionMode.SEQUENTIAL:
             results = []
             for i, task in enumerate(tasks):
-                try:
-                    result = task()
-                    results.append(result)
-                    self.logger.debug(f"Task {i+1}/{task_count} completed successfully")
-                except Exception as e:
-                    self.logger.error(f"Task {i+1}/{task_count} failed: {str(e)}")
-                    raise
+                result = task()
+                results.append(result)
+                if progress_callback:
+                    progress_callback(i + 1, task_count)
             return results
         else:
-            # Use the pool for parallel execution
-            return self.pool.execute_tasks(tasks)
-            
-    def execute_with_progress(self, tasks: List[Callable[[], T]], 
-                             progress_callback: Callable[[int, int], None]) -> List[T]:
+            # For thread/process pools, use execute_tasks and manually call progress_callback
+            results = []
+            futures = self.pool.execute_tasks(tasks)
+            for i, result in enumerate(futures):
+                results.append(result)
+                if progress_callback:
+                    progress_callback(i + 1, task_count)
+            return results
+
+    def submit_async(self, tasks: List[Callable[[], T]]) -> List[Any]:
         """
-        Execute tasks with progress tracking.
+        Submit tasks asynchronously and return a list of Future objects.
         
         Args:
             tasks: List of callable tasks
-            progress_callback: Function called when a task completes (completed_count, total_count)
             
         Returns:
-            List of results in the order tasks were submitted
+            List of Future objects
         """
         task_count = len(tasks)
+        self.logger.info(f"Submitting {task_count} tasks asynchronously in {self.mode.name} mode")
         
         if self.mode == ExecutionMode.SEQUENTIAL:
-            # Execute tasks sequentially with progress updates
-            results = []
+            from concurrent.futures import Future
+            futures = []
             for i, task in enumerate(tasks):
+                future = Future()
                 try:
                     result = task()
-                    results.append(result)
-                    progress_callback(i+1, task_count)
+                    future.set_result(result)
                 except Exception as e:
-                    self.logger.error(f"Task {i+1}/{task_count} failed: {str(e)}")
-                    raise
-            return results
-        elif self.mode == ExecutionMode.THREADED:
-            # Thread pool supports progress tracking
-            return self.pool.execute_tasks_with_progress(tasks, progress_callback)
+                    future.set_exception(e)
+                futures.append(future)
+            return futures
         else:
-            # Process pool doesn't have progress tracking, fall back to regular execution
-            # and update progress at the end
-            results = self.pool.execute_tasks(tasks)
-            progress_callback(task_count, task_count)
-            return results
-            
-    def change_mode(self, mode: ExecutionMode, max_workers: Optional[int] = None):
+            return self.pool.submit_tasks(tasks)
+
+    def change_mode(self, new_mode: ExecutionMode, max_workers: int = None):
         """
-        Change the execution mode.
-        
+        Change execution mode dynamically.
+
         Args:
-            mode: New execution mode
+            new_mode: New ExecutionMode
             max_workers: Optional new max_workers value
         """
-        if mode == self.mode and (max_workers is None or max_workers == self.max_workers):
-            # No change needed
-            return
-            
-        # Update settings
-        self.mode = mode
+        self.logger.info(f"Changing execution mode from {self.mode.name} to {new_mode.name}")
+        self.mode = new_mode
+
         if max_workers is not None:
             self.max_workers = max_workers
-            
-        # Recreate the pool if needed
-        if mode == ExecutionMode.THREADED:
-            self.pool = ThreadPool(max_workers=self.max_workers)
-        elif mode == ExecutionMode.MULTIPROCESS:
-            self.pool = ProcessPool(max_workers=self.max_workers)
+
+        if self.mode == ExecutionMode.MULTITHREAD:
+            self.pool = ThreadPool(self.max_workers)
+        elif self.mode == ExecutionMode.MULTIPROCESS:
+            self.pool = ProcessPool(self.max_workers)
         else:
             self.pool = None
-            
-        self.logger.info(f"Changed execution mode to {mode.name}")

@@ -16,9 +16,9 @@ file_configs:
     selection:
       mode: "include"  # Options: "all", "include", "exclude"
       files:
-        - "v1_player_cluster0.yaml"
+        # - "v1_player_cluster0.yaml"
         - "v1_player_cluster1.yaml"
-        - "v1_player_cluster2.yaml"
+        # - "v1_player_cluster2.yaml"
         # Add more player files as needed
 
 # Simulation parameters
@@ -26,17 +26,17 @@ max_spins: 15000          # 每个会话最大旋转次数
 max_sim_duration: 300     # 模拟器运行最大时长(秒)
 max_player_duration: 86400 # 玩家逻辑时间最大值(秒)
 initial_balance: 5000.0
-sessions_per_pair: 1000000   # 当前测试值，大规模时调整为更大值
+sessions_per_pair: 100000   # 当前测试值，大规模时调整为更大值
 
 # 并发控制参数（正确使用现有的TaskExecutor）
 use_concurrency: true
 max_concurrent_sessions: 32    # TaskExecutor的worker数量，建议值：CPU核心数 × 1.5-2
-instances_per_pair: 16         # 每个pair预创建的实例数量（用于大规模优化）
+instances_per_pair: 32         # 每个pair预创建的实例数量（用于大规模优化）
 use_instance_pool: true       # 是否启用实例池（总session > 100时自动启用）
 
 # 内存优化参数（防止大规模模拟内存爆炸）
-batch_write_size: 200         # 每N个session汇总后批量写入文件
-max_buffer_size: 200         # 缓冲区最大大小，防止内存爆炸
+batch_write_size: 300         # 每N个session汇总后批量写入文件
+max_buffer_size: 500         # 缓冲区最大大小，防止内存爆炸
 
 # 硬件建议配置注释（根据你的机器选择）
 # 4核CPU:  max_concurrent_sessions: 6-8
@@ -63,6 +63,12 @@ output:
     simulation_dir_format: "sim_{timestamp}"  # 模拟目录名格式
     timestamp_format: "%Y%m%d-%H%M%S"         # 时间戳格式
     # simulation_name: "test"
+
+  s3:
+    use_s3: true            # 开关：是否启用 S3 上传
+    bucket: "bituslabs-team-ai"  # S3 Bucket 名称
+    region: "us-west-2"         # Bucket 所在区域
+    prefix: "gail_simulator_data_raw"       # 上传时在 bucket 下的前缀目录
   
   # 会话数据记录
   session_recording:
@@ -90,14 +96,14 @@ rng:
 # Logging configuration
 logging:
   level: "INFO"  # Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
-  console: true
+  console: false
   console_level: "INFO"
   file:
     enabled: true
     path: "logs/simulator.log"
     level: "DEBUG"
     max_bytes: 10485760  # 10 MB
-    backup_count: 5
+    backup_count: 10
   loggers:
     domain: 
       level: INFO"  # 或 "ERROR"，只显示警告或错误

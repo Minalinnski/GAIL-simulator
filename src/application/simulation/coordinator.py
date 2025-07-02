@@ -7,7 +7,10 @@ import threading
 import queue
 from typing import Dict, List, Any, Optional, Tuple
 import copy
-from collections import defaultdict
+from collections import defaultdict, deque
+import asyncio
+import aiofiles
+from concurrent.futures import ThreadPoolExecutor
 
 from src.domain.events.event_dispatcher import EventDispatcher
 from src.domain.session.factories.session_factory import SessionFactory
@@ -100,7 +103,7 @@ class SimulationCoordinator:
         # 调整TaskExecutor的worker数量
         if max_concurrent_sessions and self.task_executor:
             from src.infrastructure.concurrency.task_executor import ExecutionMode
-            current_mode = ExecutionMode.THREADED if use_concurrency else ExecutionMode.SEQUENTIAL
+            current_mode = ExecutionMode.MULTITHREAD if use_concurrency else ExecutionMode.SEQUENTIAL
             self.task_executor.change_mode(current_mode, max_concurrent_sessions)
             self.num_workers = max_concurrent_sessions
         else:

@@ -131,7 +131,7 @@ def main():
     if args.no_concurrency:
         execution_mode = ExecutionMode.SEQUENTIAL
     else:
-        execution_mode = ExecutionMode.THREADED
+        execution_mode = ExecutionMode.MULTITHREAD
         
     task_executor = TaskExecutor(execution_mode)
     
