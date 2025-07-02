@@ -1,0 +1,54 @@
+# src/application/config/players/v1_player_cluster2.yaml
+# V1模型玩家 - 聚类2
+
+# 基本信息
+player_id: "v1_cluster2_player"
+name: "V1 Cluster 2 Player"
+description: "V1模型训练的聚类2玩家"
+
+# 玩家基本属性
+currency: "CNY"
+
+# 初始余额配置
+initial_balance:
+  avg: 458.45           # 余额平均值（必须）
+  std: 4855.535720979006            # 余额标准差
+  min: 50.0            # 最小余额
+  max: 12597.2893           # 最大余额
+
+
+# 模型版本
+model_version: "v1"
+
+# V1模型特定配置
+model_config_v1:
+  cluster_id: 2
+  # 模型文件路径（相对于v1/model_files/目录）
+  # base_model_dir: "path/to/custom/model/dir"  # 可选，如果不指定则使用默认路径
+  
+  # 基本约束
+  min_delay: 2.0
+  max_delay: 3.0
+  default_delay: 1.0
+  
+  # 会话控制
+  max_session_duration: 386400600  # 最大会话时长（秒）
+  max_spins_per_session: 15000  # 最大旋转次数
+
+  first_bet_mapping:
+    0.5: 3788684
+    1.0: 7232067
+    2.5: 22391981
+    5.0: 22280877
+    8.0: 9610428
+    15.0: 7553884
+    20.0: 187
+    25.0: 4425701
+    50.0: 1298319
+    70.0: 172483
+    100.0: 125167
+    250.0: 30846
+    500.0: 17839
+    1000.0: 6580
+    2000.0: 3155
+    5000.0: 485

@@ -1,0 +1,28 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  gail-simulator:
+    build: .
+    container_name: gail-simulator
+    volumes:
+      - ./config:/app/config:ro
+      - ./results:/app/results
+      - ./logs:/app/logs
+      - ./models:/app/models:ro  # Mount your model files
+    environment:
+      - LOG_LEVEL=INFO
+    working_dir: /app
+    # 可以通过环境变量传递参数
+    command: ["./build/gail_simulator", "-c", "config/simulation.yaml"]
+
+  # 可选：添加一个用于开发的服务
+  gail-dev:
+    build: .
+    container_name: gail-simulator-dev
+    volumes:
+      - .:/app
+    working_dir: /app
+    entrypoint: ["/bin/bash"]
+    stdin_open: true
+    tty: true

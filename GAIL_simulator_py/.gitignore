@@ -1,0 +1,46 @@
+# 忽略所有结果和报告目录
+results/
+reports/
+
+# 忽略测试输出目录
+tests/outputs/
+
+# 忽略所有 __pycache__ 文件夹
+__pycache__/
+**/__pycache__/
+
+# 忽略 macOS 系统生成的 .DS_Store 文件
+.DS_Store
+**/.DS_Store
+
+# 忽略 VS Code 配置文件
+.vscode/
+
+# 忽略压缩和打包文件
+*.zip
+*.tar.gz
+*.tar.bz2
+
+# 忽略 Python 字节码文件
+*.pyc
+*.pyo
+*.pyd
+
+# 忽略覆盖率报告
+htmlcov/
+coverage.xml
+*.cover
+*.coverage
+*.coveragerc
+
+# 忽略 pytest 缓存
+.pytest_cache/
+.cache/
+
+# 忽略 pipenv、poetry 环境
+Pipfile.lock
+.poetry/
+
+# 忽略环境配置文件
+.env
+.env.*
