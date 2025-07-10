@@ -12,6 +12,7 @@ from ..services.data_processor_service import DataProcessorService
 class V1DecisionEngine(BaseDecisionEngine):
     """
     V1决策引擎实现，使用预训练的投注和终止模型
+    只负责模型决策，不管理first_bet状态
     """
     
     def __init__(self, player, config: Dict[str, Any] = None):
@@ -19,7 +20,7 @@ class V1DecisionEngine(BaseDecisionEngine):
         初始化V1决策引擎
         
         Args:
-            player: 拥有此引擎的玩家实例
+            player: 拥有此引擎的玩家实例（现在是无状态的）
             config: 引擎配置
         """
         super().__init__(player, config)
@@ -32,39 +33,51 @@ class V1DecisionEngine(BaseDecisionEngine):
         self.data_processor = DataProcessorService()
 
         self.rng = random.Random()
-
-        self._is_first_bet = True
-        self._first_bet_amount = self._init_first_bet_amount()
         
         # 初始化模型服务
         self._initialize_model_service()
         
         self.logger.debug(f"V1决策引擎初始化完成 - Cluster {self.cluster_id}")
 
-    def _init_first_bet_amount(self):
+    def calculate_first_bet(self, balance: float) -> float:
+        """
+        计算首次投注额（由Player调用，传入当前余额）
+        
+        Args:
+            balance: 当前余额
+            
+        Returns:
+            首次投注额
+        """
         try:
             first_bet_config = self.config.get("first_bet_mapping", {})
             if not first_bet_config:
-                raise ValueError(f"V1决策引擎 - Cluster {self.cluster_id} - bet mapping not found!")
+                self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - first_bet_mapping not found")
+                return min(1.0, balance * 0.01)
 
-            # 过滤可负担的 bet
-            affordable_items = [(float(k), v) for k, v in first_bet_config.items() if float(k) <= self.player.balance]
+            # 过滤可负担的投注选项
+            affordable_items = []
+            for bet_str, weight in first_bet_config.items():
+                bet_amount = float(bet_str)
+                if bet_amount <= balance:
+                    affordable_items.append((bet_amount, float(weight)))
+            
             if not affordable_items:
-                self.logger.warning(f"首次投注预计算: balance {self.player.balance} 不足以负担任何 bet, 使用最小 bet")
+                self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - 余额 {balance} 不足以负担任何投注, 使用最小投注")
                 min_bet = min(float(k) for k in first_bet_config.keys())
-                return min_bet
+                return min(min_bet, balance)
 
-            items = [str(k) for k, v in affordable_items]
-            weights = [v for k, v in affordable_items]
-
-            first_bet = random.choices(items, weights=weights, k=1)[0]
-            first_bet = float(first_bet)  # 确保返回数值
-            self.logger.info(f"首次投注预计算完成: {first_bet}")
-            return first_bet
+            # 使用权重随机选择
+            bet_options = [item[0] for item in affordable_items]
+            weights = [item[1] for item in affordable_items]
+            
+            first_bet = random.choices(bet_options, weights=weights, k=1)[0]
+            self.logger.debug(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算完成: {first_bet} (余额: {balance})")
+            return float(first_bet)
 
         except Exception as e:
-            self.logger.warning(f"首次投注预计算失败: {e}, 使用默认值1.0")
-            return 1.0
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算失败: {e}")
+            return min(1.0, balance * 0.01)
 
     def _initialize_model_service(self):
         """初始化模型服务"""
@@ -78,10 +91,10 @@ class V1DecisionEngine(BaseDecisionEngine):
                 base_model_dir=base_model_dir
             )
             
-            self.logger.info(f"模型服务初始化成功 - Cluster {self.cluster_id}")
+            self.logger.info(f"V1决策引擎 - Cluster {self.cluster_id} - 模型服务初始化成功")
             
         except Exception as e:
-            self.logger.error(f"模型服务初始化失败: {e}")
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 模型服务初始化失败: {e}")
             # 不设置fallback，让系统自然处理
             raise
     
@@ -91,31 +104,23 @@ class V1DecisionEngine(BaseDecisionEngine):
         
         Args:
             machine_id: 机器ID
-            session_data: 会话数据
+            session_data: 会话数据（包含当前余额等状态信息）
             
         Returns:
             (投注额, 延迟时间) 元组
         """
         try:
-            # # 1. 首先检查是否应该终止
-            # if self._should_terminate_session(machine_id, session_data):
-            #     self.logger.debug("模型决定终止会话")
-            #     return 0.0, 0.0
-            if self._is_first_bet:
-                self._is_first_bet = False
-                bet_amount = self._first_bet_amount
-            else:
-            # 2. 如果继续，决定投注额
-                bet_amount = self._decide_bet_amount(session_data)
+            # 决定投注额（所有投注都通过模型决策，不再有first_bet特殊逻辑）
+            bet_amount = self._decide_bet_amount(session_data)
             
-            # 3. 决定延迟时间
+            # 决定延迟时间
             delay_time = self._decide_delay_time(session_data)
             
-            self.logger.debug(f"V1决策结果: 投注={bet_amount}, 延迟={delay_time:.1f}秒")
+            self.logger.debug(f"V1决策引擎 - Cluster {self.cluster_id} - 决策结果: 投注={bet_amount}, 延迟={delay_time:.1f}秒")
             return bet_amount, delay_time
             
         except Exception as e:
-            self.logger.error(f"V1决策失败: {e}")
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 决策失败: {e}")
             # 不使用fallback，重新抛出异常让系统处理
             raise
     
@@ -144,7 +149,7 @@ class V1DecisionEngine(BaseDecisionEngine):
             return should_terminate
             
         except Exception as e:
-            self.logger.error(f"终止决策失败: {e}")
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 终止决策失败: {e}")
             # 不使用fallback，重新抛出异常
             raise
     
@@ -160,13 +165,13 @@ class V1DecisionEngine(BaseDecisionEngine):
                 deterministic=True
             )
             
-            # # 应用约束条件
-            # bet_amount = self._apply_bet_constraints(bet_amount, session_data)
+            # 应用约束条件
+            bet_amount = self._apply_bet_constraints(bet_amount, session_data)
             
             return bet_amount
             
         except Exception as e:
-            self.logger.error(f"投注决策失败: {e}")
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 投注决策失败: {e}")
             # 不使用fallback，重新抛出异常
             raise
         
@@ -175,10 +180,14 @@ class V1DecisionEngine(BaseDecisionEngine):
         min_delay = self.config.get('min_delay', 2.0)
         max_delay = self.config.get('max_delay', 3.0)
         
-        recent_results = session_data.get('spins', [])
+        recent_results = session_data.get('results', [])  # 使用'results'而不是'spins'
         if recent_results:
             last_result = recent_results[-1]
-            profit = last_result.get('profit', 0)
+            # 确保从SpinResult对象中正确获取profit
+            if hasattr(last_result, 'profit'):
+                profit = last_result.profit
+            else:
+                profit = last_result.get('profit', 0)
             
             if profit > 0:
                 # 赢了，随机偏向稍慢区间（2.5 - 3.0s）
@@ -193,18 +202,24 @@ class V1DecisionEngine(BaseDecisionEngine):
     def _apply_bet_constraints(self, bet_amount: float, session_data: Dict[str, Any]) -> float:
         """应用投注约束条件"""
         model_bet_amount = bet_amount
-        # 1. 不超过余额
-        # current_balance = session_data.get('current_balance', self.player.balance)
-        # bet_amount = min(bet_amount, current_balance)
         
-        # 2. 符合可用投注额
+        # 确保bet_amount是数值类型
+        if isinstance(bet_amount, str):
+            try:
+                bet_amount = float(bet_amount)
+            except (ValueError, TypeError):
+                self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - 无效的投注额格式: {bet_amount}, 使用默认值1.0")
+                bet_amount = 1.0
+        
+        # 符合可用投注额
         available_bets = session_data.get('available_bets', [1.0])
         if available_bets:
-            bet_amount = min(available_bets, key=lambda x: abs(x - bet_amount))
+            bet_amount = min(available_bets, key=lambda x: abs(float(x) - bet_amount))
         
-        if model_bet_amount != bet_amount:
-            self.logger.debug(f"Cluster {self.cluster_id}: 调整模型输出")
-        return bet_amount
+        if abs(model_bet_amount - bet_amount) > 0.01:  # 有显著调整时才记录
+            self.logger.debug(f"V1决策引擎 - Cluster {self.cluster_id} - 调整模型输出: {model_bet_amount} -> {bet_amount}")
+        
+        return float(bet_amount)  # 确保返回float类型
     
     def should_end_session(self, machine_id: str, session_data: Dict[str, Any]) -> bool:
         """
@@ -219,6 +234,8 @@ class V1DecisionEngine(BaseDecisionEngine):
         Returns:
             如果应该结束会话则为True
         """
-        if self._is_first_bet:
+        try:
+            return self._should_terminate_session(machine_id, session_data)
+        except Exception as e:
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 终止判断失败: {e}, 默认继续会话")
             return False
-        return self._should_terminate_session(machine_id, session_data)

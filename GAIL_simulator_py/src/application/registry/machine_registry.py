@@ -9,8 +9,7 @@ from src.domain.machine.factories.machine_factory import MachineFactory
 
 class MachineRegistry:
     """
-    Registry for slot machine instances.
-    Combines aspects of repository and factory to manage machine lifecycle.
+    Registry for slot machine instances with support for stateless instance creation.
     """
     def __init__(self, config_loader, machine_factory: Optional[MachineFactory] = None,
                 rng_provider=None):
@@ -31,8 +30,9 @@ class MachineRegistry:
         else:
             self.machine_factory = machine_factory
             
-        # Machine storage
-        self.machines = {}  # machine_id -> SlotMachine
+        # Machine storage - 存储配置模板，不是实例
+        self.machine_configs = {}  # machine_id -> config dict
+        self.machines = {}  # machine_id -> SlotMachine (配置模板实例)
         
     def load_machines(self, config_dir: str) -> List[str]:
         """
@@ -53,6 +53,10 @@ class MachineRegistry:
         
         # Store in registry
         self.machines.update(machines)
+        
+        # 也存储配置以便创建新实例
+        for machine_id, machine in machines.items():
+            self.machine_configs[machine_id] = machine.config
         
         self.logger.info(f"Loaded {len(machines)} machines")
         return list(machines.keys())
@@ -77,13 +81,45 @@ class MachineRegistry:
         
         # Store in registry
         self.machines[machine.id] = machine
+        self.machine_configs[machine.id] = machine.config
         
         self.logger.info(f"Loaded machine {machine.id}")
         return machine.id
+    
+    def create_instance(self, machine_id: str) -> Optional[SlotMachine]:
+        """
+        创建一个新的无状态Machine实例（用于实例池）
+        
+        Args:
+            machine_id: Machine ID
+            
+        Returns:
+            新的SlotMachine实例或None
+        """
+        if machine_id not in self.machine_configs:
+            self.logger.error(f"Machine config not found: {machine_id}")
+            return None
+        
+        try:
+            # 从存储的配置创建新实例
+            config = self.machine_configs[machine_id].copy()
+            
+            # 创建无状态Machine实例
+            instance = self.machine_factory.create_machine(
+                machine_id=machine_id,
+                config=config
+            )
+            
+            self.logger.debug(f"Created new instance for machine {machine_id}")
+            return instance
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create instance for machine {machine_id}: {e}")
+            return None
         
     def get_machine(self, machine_id: str) -> Optional[SlotMachine]:
         """
-        Get a machine by ID.
+        Get a machine by ID (配置模板实例).
         
         Args:
             machine_id: Machine ID to retrieve
@@ -132,6 +168,7 @@ class MachineRegistry:
             machine: SlotMachine instance to add
         """
         self.machines[machine.id] = machine
+        self.machine_configs[machine.id] = machine.config
         self.logger.debug(f"Added machine {machine.id} to registry")
         
     def remove_machine(self, machine_id: str) -> bool:
@@ -146,6 +183,8 @@ class MachineRegistry:
         """
         if machine_id in self.machines:
             del self.machines[machine_id]
+            if machine_id in self.machine_configs:
+                del self.machine_configs[machine_id]
             self.logger.debug(f"Removed machine {machine_id} from registry")
             return True
         return False
@@ -153,4 +192,5 @@ class MachineRegistry:
     def clear(self) -> None:
         """Clear all machines from the registry."""
         self.machines.clear()
+        self.machine_configs.clear()
         self.logger.debug("Cleared all machines from registry")
