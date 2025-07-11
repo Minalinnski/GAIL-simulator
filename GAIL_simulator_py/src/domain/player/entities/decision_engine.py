@@ -61,7 +61,8 @@ class BaseDecisionEngine:
     def should_end_session(self, machine_id: str, session_data: Dict[str, Any]) -> bool:
         """基础会话结束判断实现，子类应重写此方法。"""
         # 只检查余额条件，其他系统级检查由SessionRunner处理
-        if self.player.balance <= 0:
+        current_balance = session_data.get("current_balance", 0.0)
+        if current_balance <= 0:
             return True
             
         # 子类可实现自己的决策逻辑

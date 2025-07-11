@@ -94,14 +94,16 @@ class GamingSession:
         return self.session_balance
     
     def update_balance(self, amount: float):
-        """
-        更新余额
-        
-        Args:
-            amount: 要添加到余额的金额（负数为扣除）
-        """
+        """更新余额"""
         self.session_balance += amount
         self.logger.debug(f"Balance updated: {self.session_balance:.2f} ({amount:+.2f})")
+
+    def update_duration(self, delay: float):
+        """更新时长"""
+        if delay <= 0:
+            self.logger.warning(f"Invalid delay accumulated: {delay}")
+        self.stats.duration += delay
+        self.logger.debug(f"Duration updated: {self.stats.duration:.2f} ({delay:+.2f})")
     
     def get_initial_balance(self) -> float:
         """获取初始余额"""
@@ -111,19 +113,20 @@ class GamingSession:
         """获取首次投注额"""
         return self.first_bet
 
-    def prepare_session_data(self) -> Dict[str, Any]:
+    def get_session_data(self) -> Dict[str, Any]:
         """
         准备会话数据供Player决策使用（包含状态信息）
         """
-        current_time = time.time()
+        # current_time = time.time()
         
         # 基本会话数据
         session_data = {
             "session_id": self.id,
             "machine_id": self.machine.id,
-            "start_time": self.sim_start_time,
-            "current_time": current_time,
-            "duration": current_time - self.sim_start_time if self.sim_start_time else 0,
+            # "start_time": self.sim_start_time,
+            # "current_time": current_time,
+            "duration": self.stats.duration,
+            # "sim_duration": current_time - self.sim_start_time if self.sim_start_time else 0,
             "start_balance": self.initial_balance,
             "current_balance": self.session_balance,  # 使用session管理的余额
             "total_spins": self.stats.total_spins,
@@ -135,11 +138,10 @@ class GamingSession:
             "currency": self.player.currency,
             "in_free_spins": self.in_free_spins,
             "free_spins_remaining": self.free_spins_remaining,
-            "bonus_triggered": self.stats.bonus_triggered,
-            "first_bet": self.first_bet  # 添加首次投注信息
+            "bonus_triggered": self.stats.bonus_triggered
         }
         
-        # 添加最近的旋转结果
+        # 添加最近的旋转结果 - 转换为字典格式
         recent_results = []
         for spin in self.spins[-self.NUM_TRACK_BACK:]:
             recent_results.append(spin)
@@ -157,7 +159,7 @@ class GamingSession:
         self.active = True
         
         # 初始化统计开始时间和余额
-        self.stats.start_time = self.sim_start_time
+        # self.stats.start_time = self.sim_start_time
         self.stats.start_balance = self.initial_balance
         
         self.logger.info(f"Session started - Initial balance: {self.initial_balance:.2f}, Current balance: {self.session_balance:.2f}")
@@ -172,7 +174,6 @@ class GamingSession:
                 data={
                     "start_time": self.sim_start_time,
                     "start_balance": self.initial_balance,
-                    "current_balance": self.session_balance,
                     "first_bet": self.first_bet
                 }
             ))
@@ -187,11 +188,11 @@ class GamingSession:
         self.active = False
         
         # 更新统计结束时间
-        self.stats.end_time = self.sim_end_time
+        # self.stats.end_time = self.sim_end_time
         self.stats.final_balance = self.session_balance
         
-        duration = self.sim_end_time - self.sim_start_time
-        self.logger.info(f"Session ended - Duration: {duration:.1f}s, Final balance: {self.session_balance:.2f}")
+        sim_duration = self.get_sim_duration()
+        self.logger.info(f"Session ended - Duration: {sim_duration}s, Final balance: {self.session_balance:.2f}")
         
         # 保存会话数据（如果有输出管理器）
         if self.output_manager:
@@ -210,108 +211,144 @@ class GamingSession:
                 machine_id=self.machine.id,
                 data={
                     "end_time": self.sim_end_time,
-                    "duration": duration,
+                    "duration": self.stats.duration,
+                    "sim_duration": self.sim_duration,
                     "final_balance": self.session_balance,
                     "total_spins": self.stats.total_spins,
                     "total_profit": self.stats.total_win - self.stats.total_bet
                 }
             ))
             
-    def execute_spin(self, bet_amount: float, machine_result: Dict[str, Any]) -> SpinResult:
-        """
-        Execute a single spin and update session state.
+    def execute_spin(self, bet_amount: float) -> Dict[str, Any]:
+        """保持你原来的方法名和签名"""
+        if not self.active:
+            self.logger.warning("Attempted to spin on inactive session")
+            return {"error": "Session not active"}
         
-        Args:
-            bet_amount: Amount bet on this spin
-            machine_result: Result from slot machine spin
-            
-        Returns:
-            SpinResult instance with complete spin information
-        """
-        # 从余额中扣除投注
-        self.update_balance(-bet_amount)
-        
-        # 获取赢取金额
-        win_amount = machine_result.get("total_win", 0.0)
-        if win_amount > 0:
-            self.update_balance(win_amount)
-        
-        # 创建旋转结果
-        spin_result = SpinResult(
-            spin_number=len(self.spins) + 1,
-            bet_amount=bet_amount,
-            win_amount=win_amount,
-            profit=win_amount - bet_amount,
-            in_free_spins=self.in_free_spins,
-            trigger_free_spins=machine_result.get("trigger_free_spins", False),
-            symbols=machine_result.get("symbols", []),
-            winning_lines=machine_result.get("winning_lines", []),
-            balance_after=self.session_balance,
-            timestamp=time.time()
+        prev_balance = self.session_balance
+
+        if self.in_free_spins:
+            bet_amount = self.free_spins_base_bet
+            if bet_amount <= 0:
+                self.logger.warning(f"Invalid free spin base bet amount: {bet_amount}")
+                return {"error": "Invalid free spin base bet amount"}
+        else:
+            if bet_amount <= 0:
+                self.logger.warning(f"Invalid bet amount: {bet_amount}")
+                return {"error": "Invalid bet amount"}
+            self.update_balance(-bet_amount)
+            self.stats.total_bet += bet_amount
+
+        result_grid, trigger_free, free_remaining = self.machine.spin(
+            in_free=self.in_free_spins,
+            num_free_left=self.free_spins_remaining
         )
         
-        # 记录旋转结果
-        if self.should_record_spins:
-            self.spins.append(spin_result)
+        # 评估赢额
+        win_data = self.machine.evaluate_win(
+            grid=result_grid,
+            bet=bet_amount,
+            in_free = self.in_free_spins,
+            active_lines=self.player.config.get("active_lines", None)
+        )
         
-        # 更新统计
-        self.stats.update_spin(spin_result)
+        # 将赢额添加到玩家余额
+        win_amount = win_data.get("total_win", 0)
+        self.update_balance(win_amount)
         
-        # 处理免费旋转触发
-        if machine_result.get("trigger_free_spins", False):
-            self.in_free_spins = True
-            self.free_spins_remaining = machine_result.get("free_spins_count", 0)
-            self.free_spins_base_bet = bet_amount
-            
-            # 派发免费旋转触发事件
-            if self.event_dispatcher:
-                self.event_dispatcher.dispatch(SessionEvent(
-                    type=SessionEventType.FREE_SPINS_TRIGGERED,
-                    session_id=self.id,
-                    player_id=self.player.id,
-                    machine_id=self.machine.id,
-                    data={
-                        "free_spins_count": self.free_spins_remaining,
-                        "trigger_spin": spin_result.spin_number
-                    }
-                ))
+        # 更新统计数据
+        self.stats.total_spins += 1
+        self.stats.total_win += win_amount
         
-        # 处理免费旋转计数
         if self.in_free_spins:
-            self.free_spins_remaining -= 1
+            self.stats.free_spins_count += 1
+            self.stats.free_game_win += win_amount
+        else:
+            self.stats.base_game_win += win_amount
+        
+        if win_amount > 0:
+            self.stats.win_count += 1
+        self.stats.win_rate = self.stats.win_count / self.stats.total_spins
+
+        self.stats.total_profit = self.stats.total_win - self.stats.total_bet
+        self.stats.return_to_player = self.stats.total_win / self.stats.total_bet if self.stats.total_bet > 0 else 0.0
+        
+        # 检查大奖
+        win_odds = win_amount / bet_amount if bet_amount > 0 else 0
+        is_big_win = win_odds >= self.BIG_WIN_THRESHOLD
+        if is_big_win:
+            self.stats.big_win_count += 1
+        
+        # 处理免费旋转触发和状态更新
+        if trigger_free and not self.in_free_spins:
+            # 新触发免费旋转
+            self.in_free_spins = True
+            self.free_spins_remaining = free_remaining
+            self.free_spins_base_bet = bet_amount
+            self.stats.bonus_triggered = True
+            self.logger.info(f"Free spins triggered: {free_remaining} spins at bet {bet_amount}")
+        elif self.in_free_spins:
+            # 更新免费旋转剩余次数
+            self.free_spins_remaining = free_remaining
             if self.free_spins_remaining <= 0:
                 self.in_free_spins = False
                 self.free_spins_base_bet = 0.0
-                
-                # 派发免费旋转结束事件
-                if self.event_dispatcher:
-                    self.event_dispatcher.dispatch(SessionEvent(
-                        type=SessionEventType.FREE_SPINS_ENDED,
-                        session_id=self.id,
-                        player_id=self.player.id,
-                        machine_id=self.machine.id,
-                        data={
-                            "final_spin": spin_result.spin_number
-                        }
-                    ))
+                self.logger.info("Free spins sequence completed")
         
-        # 检查大奖
-        if spin_result.win_multiplier >= self.BIG_WIN_THRESHOLD:
-            if self.event_dispatcher:
-                self.event_dispatcher.dispatch(SessionEvent(
-                    type=SessionEventType.BIG_WIN,
-                    session_id=self.id,
-                    player_id=self.player.id,
-                    machine_id=self.machine.id,
-                    data={
-                        "win_amount": win_amount,
-                        "multiplier": spin_result.win_multiplier,
-                        "spin_number": spin_result.spin_number
-                    }
-                ))
+        # 计算当前streak
+        streak = 0
+        if len(self.spins) > 0:
+            prev_win = self.spins[-1].get('payout', 0) > 0
+            curr_win = win_amount > 0
+            if curr_win == prev_win:
+                streak = self.spins[-1].get('streak', 0)
+                streak = streak + 1 if curr_win else streak - 1
+            else:
+                streak = 1 if curr_win else -1
+        else:
+            streak = 1 if win_amount > 0 else -1
+
+        # 创建旋转结果对象
+        spin_result = SpinResult(
+            session_id=self.id,
+            spin_number=self.stats.total_spins,
+            bet=bet_amount,
+            payout=win_amount,
+            profit=win_amount - bet_amount,
+            odds = win_odds,
+            balance_before=prev_balance,
+            balance_after=self.session_balance,
+            result_grid=result_grid,
+            in_free_spins=self.in_free_spins,
+            free_spins_triggered=trigger_free,
+            free_spins_remaining=free_remaining,
+            free_spins_base_bet=self.free_spins_base_bet,
+            line_wins=win_data.get("line_wins", []),
+            line_wins_info=win_data.get("line_wins_info", []),
+            scatter_win=win_data.get("scatter_win", 0),
+            streak=streak,
+            big_win=is_big_win
+        )
         
-        return spin_result
+        # Log result
+        if win_amount > 0:
+            self.logger.debug(f"Spin won: {win_amount} (x{win_amount/bet_amount:.1f})")
         
+        self.logger.debug(
+            f"Spin result: bet={bet_amount}, payout={win_amount}, " +
+            f"balance={self.session_balance}, " + 
+            f"free_spins={'active' if self.in_free_spins else 'inactive'}, " +
+            f"remaining={self.free_spins_remaining}"
+        )
+        
+        # 转换为字典格式
+        result_dict = spin_result.to_dict()
+        self.spins.append(result_dict)
+        # 添加win_data便于其他组件使用
+        result_dict["win_data"] = win_data
+            
+        return result_dict
+
     def reset(self):
         """重置会话状态以进行新的模拟运行"""
         # 重新生成状态
@@ -349,8 +386,8 @@ class GamingSession:
         """Get the total number of spins played."""
         return self.stats.total_spins
         
-    def get_session_duration(self) -> float:
-        """Get the session duration in seconds."""
+    def get_sim_duration(self) -> float:
+        """Get the session simulation duration in seconds."""
         if not self.sim_start_time:
             return 0.0
         end_time = self.sim_end_time if self.sim_end_time else time.time()

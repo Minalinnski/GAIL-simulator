@@ -64,10 +64,9 @@ class RandomDecisionEngine(BaseDecisionEngine):
         Returns:
             如果应该结束会话则为True
         """
-        # 只检查基本结束条件
-        
-        # 1. 余额不足
-        if self.player.balance <= 0:
+        # 1. 余额不足（从session_data获取，而不是self.player.balance）
+        current_balance = session_data.get("current_balance", 0.0)
+        if current_balance <= 0:
             self.logger.debug("余额不足，结束会话")
             return True
         
@@ -86,5 +85,10 @@ class RandomDecisionEngine(BaseDecisionEngine):
             self.logger.debug(f"旋转次数 ({total_spins}) 达到限制 ({max_spins})，结束会话")
             return True
         
-        # 其他结束判断由模型通过返回bet=0来表示
+        # 4. 随机结束（根据配置的概率）
+        end_probability = self.config.get("end_probability", 0.01)
+        if end_probability > 0 and self.model.rng.random() < end_probability:
+            self.logger.debug(f"随机决定结束会话 (概率: {end_probability})")
+            return True
+        
         return False

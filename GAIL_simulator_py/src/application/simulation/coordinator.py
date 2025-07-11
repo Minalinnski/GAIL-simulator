@@ -383,13 +383,17 @@ class SimulationCoordinator:
                 summary_report = self._generate_summary_report(session_analyses)
                 report_generator.generate_summary_report(summary_report, {})
             
-            if include_config.get("player_preference_report", True):
-                preference_analysis = self.preference_analyzer.analyze_player_preferences(session_analyses)
-                report_generator.generate_player_preference_report(preference_analysis)
+            if include_config.get("player_preference_report", False):
+                pass
+                # TODO
+                # preference_analysis = self.preference_analyzer.analyze_player_preferences(session_analyses)
+                # report_generator.generate_player_preference_report(preference_analysis)
             
-            if include_config.get("machine_performance_report", True):
-                machine_analysis = self._generate_machine_performance_analysis(session_analyses)
-                report_generator.generate_machine_performance_report(machine_analysis)
+            if include_config.get("machine_performance_report", False):
+                pass
+                # TODO 
+                # machine_analysis = self._generate_machine_performance_analysis(session_analyses)
+                # report_generator.generate_machine_performance_report(machine_analysis)
             
             self.logger.info("Reports generated successfully")
             

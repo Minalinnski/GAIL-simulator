@@ -62,7 +62,7 @@ class SessionOutputManager:
     
     def _save_raw_spins_data(self, session) -> Optional[str]:
         """
-        保存原始spin数据为CSV
+        保存原始spins数据到CSV
         
         Args:
             session: GamingSession实例
@@ -70,9 +70,9 @@ class SessionOutputManager:
         Returns:
             保存的文件路径或None
         """
-        if not session.spins:
+        if not self.should_record_spins or not session.spins:
             return None
-        
+            
         try:
             # 解析player_id和machine_id
             player_id = session.player.id
@@ -91,27 +91,27 @@ class SessionOutputManager:
             with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile)
                 
-                # 写入标题行
+                # 写入标题行 - 使用正确的字段名
                 headers = [
-                    'session_id', 'spin_number', 'bet_amount', 'win_amount', 'profit',
-                    'balance_after', 'in_free_spins', 'trigger_free_spins',
+                    'session_id', 'spin_number', 'bet', 'payout', 'profit',
+                    'balance_after', 'in_free_spins', 'free_spins_triggered',
                     'symbols', 'winning_lines', 'timestamp'
                 ]
                 writer.writerow(headers)
                 
-                # 写入数据行
+                # 写入数据行 - 使用正确的字段名
                 for spin in session.spins:
                     row = [
                         self.session_id,
                         spin.spin_number,
-                        spin.bet_amount,
-                        spin.win_amount,
+                        spin.bet,  # 修正：使用 bet 而不是 bet_amount
+                        spin.payout,  # 修正：使用 payout 而不是 win_amount
                         spin.profit,
                         spin.balance_after,
                         spin.in_free_spins,
-                        spin.trigger_free_spins,
-                        json.dumps(spin.symbols) if spin.symbols else '',
-                        json.dumps(spin.winning_lines) if spin.winning_lines else '',
+                        spin.free_spins_triggered,  # 修正：使用 free_spins_triggered 而不是 trigger_free_spins
+                        json.dumps(spin.result_grid) if spin.result_grid else '',  # 修正：使用 result_grid 而不是 symbols
+                        json.dumps(spin.line_wins_info) if spin.line_wins_info else '',  # 修正：使用 line_wins_info 而不是 winning_lines
                         spin.timestamp
                     ]
                     writer.writerow(row)

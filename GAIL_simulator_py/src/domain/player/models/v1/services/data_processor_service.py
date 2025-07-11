@@ -76,7 +76,7 @@ class DataProcessorService:
             base_point = current_balance
             
             # delta时间相关（简化处理）
-            delta_t = 1.0  # 默认值，您可以根据实际需要调整
+            delta_t = session_data.get('delta_t', 2.0)  # 默认值，您可以根据实际需要调整
             
             # delta_profit和delta_payout
             delta_profit = current_profit if spins else 0

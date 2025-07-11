@@ -36,151 +36,106 @@ class SessionRunner:
         
     def run(self) -> Dict[str, Any]:
         """
-        执行会话从开始到结束。
+        运行会话的主要方法，按照原始设计流程。
         
         Returns:
-            包含会话统计信息的字典
+            包含会话结果的字典
         """
         self.logger.info(f"Starting session {self.session.id} for player {self.session.player.id} on machine {self.session.machine.id}")
-        
-        # 开始会话
         self.session.start()
-        sim_start_time = time.time()
         
-        # 跟踪统计
-        spin_count = 0
-        player_time = 0.0  # 累积玩家逻辑时间
-        is_first_spin = True  # 标记首次旋转
+        # 初始化
+        next_bet_amount = self.session.get_first_bet()  # 预计算的首次投注
+        next_delay_time = 0.0
         
-        # 会话运行主循环
-        while True:
-            # 检查会话是否应该终止
-            terminate_reason = self._check_termination_conditions(
-                spin_count, 
-                player_time, 
-                sim_start_time
-            )
-            
-            if terminate_reason:
-                self.logger.debug(f"Session terminated: {terminate_reason}")
-                break
-            
-            # 检查是否处于免费旋转状态
-            if self.session.in_free_spins:
-                # 处理免费旋转序列
-                free_results, free_spins_count, error = self._run_free_spins_sequence()
-                spin_count += free_spins_count
-                
-                if error:
-                    # 发生错误，终止会话
-                    self._dispatch_event(SessionEventType.SESSION_ENDED, {
-                        "reason": "error_in_free_spins",
-                        "error": str(error)
-                    })
+        try:
+            while True:
+                # === 硬性停止检查（SessionRunner负责） ===
+                self.logger.debug(f"In runner: Checking strict termination")
+                terminate_reason = self._check_termination_conditions()
+                if terminate_reason:
+                    self.logger.debug(f"Session terminated: {terminate_reason}")
                     break
+
+                # === 执行Spin ===
+                self.logger.debug(f"In runner: Executing Spin")
+                spin_result = self.session.execute_spin(next_bet_amount)
+
+                # 检查错误
+                if "error" in spin_result:
+                    error_msg = spin_result.get("error", "Unknown error")
                     
-                # 免费旋转完成后继续正常流程
-                continue
+                    # 检查是否是余额不足错误
+                    if "Insufficient balance" in error_msg:
+                        self._dispatch_event(SessionEventType.SESSION_ENDED, {
+                            "reason": "insufficient_balance",
+                            "total_spins": self.session.stats.total_spins,
+                            "player_time": self.session.stats.duration
+                        })
+                    else:
+                        self._dispatch_event(SessionEventType.SESSION_ENDED, {
+                            "reason": "error",
+                            "error": error_msg,
+                            "total_spins": self.session.stats.total_spins,
+                            "player_time": self.session.stats.duration
+                        })
+                    
+                    self.logger.warning(f"Error in spin: {error_msg}")
+                    break
+
+                # === 模型推理（为下一次spin做准备） ===
+                self.logger.debug(f"In runner: Model Inference")
+                # 准备当前会话状态数据
+                session_data = self.session.get_session_data()
+
+                session_data["delta_t"] = next_delay_time
+                
+                # 玩家决策：决定下一次的投注、延迟和是否结束（无状态调用）
+                next_bet_amount, next_delay_time = self.session.player.play(self.session.machine.id, session_data)
+                
+                # 检查玩家是否想结束会话
+                if next_bet_amount < 0 or self.session.player.should_end_session(self.session.machine.id, session_data):
+                    self._dispatch_event(SessionEventType.SESSION_ENDED, {
+                        "reason": "player_decision",
+                        "total_spins": self.session.stats.total_spins,
+                        "player_time": self.session.stats.duration
+                    })
+                    self.logger.debug(f"Player {self.session.player.id} decided to end session after {self.session.stats.total_spins} spins")
+                    break
             
-            # 准备当前会话状态数据
-            session_data = self.session.prepare_session_data()
-            
-            # 玩家决策时间开始
-            player_decision_start = time.time()
-            
-            # 检查玩家是否想要结束会话（无状态调用）
-            if self.session.player.should_end_session(self.session.machine.id, session_data):
-                self.logger.debug("Player decided to end session")
-                self._dispatch_event(SessionEventType.SESSION_ENDED_BY_PLAYER, {
-                    "reason": "player_decision",
-                    "spins_played": spin_count
-                })
-                break
-            
-            # 玩家做出投注决策（无状态调用）
-            bet_amount, delay_time = self.session.player.play(self.session.machine.id, session_data)
-            
-            # 检查特殊投注值
-            if bet_amount <= 0:
-                self.logger.debug(f"Invalid bet amount {bet_amount}, ending session")
-                self._dispatch_event(SessionEventType.SESSION_ENDED_BY_PLAYER, {
-                    "reason": "invalid_bet",
-                    "bet_amount": bet_amount
-                })
-                break
-            
-            # 对于首次旋转，使用预计算的first_bet（如果available）
-            if is_first_spin:
-                first_bet = self.session.get_first_bet()
-                if first_bet > 0 and first_bet <= self.session.get_current_balance():
-                    bet_amount = first_bet
-                    self.logger.debug(f"Using pre-calculated first bet: {bet_amount}")
-                is_first_spin = False
-            
-            # 检查余额是否足够
-            if bet_amount > self.session.get_current_balance():
-                self.logger.debug(f"Insufficient balance for bet {bet_amount}, current balance: {self.session.get_current_balance()}")
-                self._dispatch_event(SessionEventType.SESSION_ENDED_BY_BALANCE, {
-                    "reason": "insufficient_balance",
-                    "bet_amount": bet_amount,
-                    "balance": self.session.get_current_balance()
-                })
-                break
-            
-            # 机器旋转（无状态调用）
-            machine_result = self.session.machine.spin(bet_amount, self.session.player.currency)
-            
-            # 会话执行旋转并更新状态
-            spin_result = self.session.execute_spin(bet_amount, machine_result)
-            
-            spin_count += 1
-            
-            # 记录玩家决策时间
-            player_decision_end = time.time()
-            decision_time = player_decision_end - player_decision_start
-            player_time += decision_time
-            
-            # 模拟延迟
-            if delay_time > 0:
-                time.sleep(delay_time)
-                player_time += delay_time
-            
-            # 派发旋转完成事件
-            self._dispatch_event(SessionEventType.SPIN_COMPLETED, {
-                "spin_number": spin_result.spin_number,
-                "bet_amount": bet_amount,
-                "win_amount": spin_result.win_amount,
-                "balance_after": self.session.get_current_balance(),
-                "profit": spin_result.profit
+        except Exception as e:
+            self.logger.error(f"Error during session execution: {str(e)}")
+            self._dispatch_event(SessionEventType.SESSION_ENDED_BY_ERROR, {
+                "error": str(e),
+                "spins_completed": self.session.stats.total_spins
             })
-            
-            # 检查余额是否过低
-            if self.session.get_current_balance() <= 0:
-                self.logger.debug("Balance depleted, ending session")
-                self._dispatch_event(SessionEventType.SESSION_ENDED_BY_BALANCE, {
-                    "reason": "balance_depleted",
-                    "final_balance": self.session.get_current_balance()
-                })
-                break
+            raise
         
         # 结束会话
         self.session.end()
+        total_duration = self.session.get_sim_duration()
+        self.logger.info(f"Session completed - Spins: {self.session.stats.total_spins}, Duration: {total_duration:.1f}s, Player time: {self.session.stats.duration:.1f}s")
         
-        # 计算最终统计
-        sim_end_time = time.time()
-        total_duration = sim_end_time - sim_start_time
+        # 返回会话结果
+        return {
+            "session_id": self.session.id,
+            "player_id": self.session.player.id,
+            "machine_id": self.session.machine.id,
+            "total_spins": self.session.stats.total_spins,
+            "total_duration": total_duration,
+            "player_time": self.session.stats.duration,
+            "final_balance": self.session.get_current_balance(),
+            "initial_balance": self.session.get_initial_balance(),
+            "total_profit": self.session.stats.total_profit,
+            "session_stats": self.session.get_session_summary()
+        }
         
-        self.logger.info(f"Session completed - Spins: {spin_count}, Duration: {total_duration:.1f}s, Player time: {player_time:.1f}s")
-        
-        # 返回会话统计（保持原有格式）
-        return self.session.get_session_summary()
-        
-    def _check_termination_conditions(self, spin_count: int, player_time: float, sim_start_time: float) -> Optional[str]:
+    def _check_termination_conditions(self) -> Optional[str]:
         """
         检查会话终止条件。
         
         Args:
-            spin_count: 当前旋转次数
+            self.session.stats.total_spins: 当前旋转次数
             player_time: 累积玩家时间
             sim_start_time: 模拟开始时间
             
@@ -188,71 +143,69 @@ class SessionRunner:
             终止原因字符串，如果不需要终止则返回None
         """
         # 检查旋转次数限制
-        if spin_count >= self.max_spins:
+        if self.session.stats.total_spins >= self.max_spins:
             return f"max_spins_reached_{self.max_spins}"
         
         # 检查模拟时间限制
-        current_time = time.time()
-        sim_duration = current_time - sim_start_time
-        if sim_duration >= self.max_sim_duration:
+        if self.session.get_sim_duration() >= self.max_sim_duration:
             return f"max_sim_duration_reached_{self.max_sim_duration}"
         
         # 检查玩家时间限制
-        if player_time >= self.max_player_duration:
+        if self.session.stats.duration >= self.max_player_duration:
             return f"max_player_duration_reached_{self.max_player_duration}"
         
         return None
         
-    def _run_free_spins_sequence(self) -> Tuple[List[Dict[str, Any]], int, Optional[Exception]]:
-        """
-        运行免费旋转序列。
+    # def _run_free_spins_sequence(self) -> Tuple[List[Dict[str, Any]], int, Optional[Exception]]:
+    #     """
+    #     运行免费旋转序列。
         
-        Returns:
-            (免费旋转结果列表, 旋转次数, 错误)
-        """
-        free_spin_results = []
-        free_spins_count = 0
-        error = None
+    #     Returns:
+    #         (免费旋转结果列表, 旋转次数, 错误)
+    #     """
+    #     free_spin_results = []
+    #     free_spins_count = 0
+    #     error = None
         
-        try:
-            self.logger.debug(f"Starting free spins sequence: {self.session.free_spins_remaining} spins")
+    #     try:
+    #         self.logger.debug(f"Starting free spins sequence: {self.session.free_spins_remaining} spins")
             
-            while self.session.in_free_spins and self.session.free_spins_remaining > 0:
-                # 使用基础投注进行免费旋转
-                bet_amount = self.session.free_spins_base_bet
+    #         while self.session.in_free_spins and self.session.free_spins_remaining > 0:
+    #             # 使用基础投注进行免费旋转
+    #             bet_amount = self.session.free_spins_base_bet
                 
-                # 机器旋转
-                machine_result = self.session.machine.spin(bet_amount, self.session.player.currency)
+    #             # 机器旋转
+    #             machine_result = self.session.machine.spin(bet_amount, self.session.player.currency)
                 
-                # 会话执行旋转
-                spin_result = self.session.execute_spin(bet_amount, machine_result)
+    #             # 会话执行旋转
+    #             spin_result = self.session.execute_spin(bet_amount, machine_result)
                 
-                free_spin_results.append({
-                    "spin_number": spin_result.spin_number,
-                    "bet_amount": bet_amount,
-                    "win_amount": spin_result.win_amount,
-                    "profit": spin_result.profit,
-                    "balance_after": self.session.get_current_balance()
-                })
+    #             free_spin_results.append({
+    #                 "spin_number": spin_result.spin_number,
+    #                 "bet_amount": bet_amount,
+    #                 "win_amount": spin_result.win_amount,
+    #                 "profit": spin_result.profit,
+    #                 "balance_after": self.session.get_current_balance()
+    #             })
                 
-                free_spins_count += 1
+    #             free_spins_count += 1
                 
-                # 派发免费旋转完成事件
-                self._dispatch_event(SessionEventType.SPIN_COMPLETED, {
-                    "spin_number": spin_result.spin_number,
-                    "bet_amount": bet_amount,
-                    "win_amount": spin_result.win_amount,
-                    "balance_after": self.session.get_current_balance(),
-                    "profit": spin_result.profit,
-                    "free_spin": True
-                })
+    #             # 派发免费旋转完成事件
+    #             self._dispatch_event(SessionEventType.SPIN_COMPLETED, {
+    #                 "spin_number": spin_result.spin_number,
+    #                 "bet_amount": bet_amount,
+    #                 "win_amount": spin_result.win_amount,
+    #                 "balance_after": self.session.get_current_balance(),
+    #                 "profit": spin_result.profit,
+    #                 "free_spin": True
+    #             })
                 
-        except Exception as e:
-            self.logger.error(f"Error in free spins sequence: {e}")
-            error = e
+    #     except Exception as e:
+    #         self.logger.error(f"Error in free spins sequence: {e}")
+    #         error = e
             
-        self.logger.debug(f"Free spins sequence completed: {free_spins_count} spins")
-        return free_spin_results, free_spins_count, error
+    #     self.logger.debug(f"Free spins sequence completed: {free_spins_count} spins")
+    #     return free_spin_results, free_spins_count, error
         
     def _dispatch_event(self, event_type: SessionEventType, data: Dict[str, Any]):
         """

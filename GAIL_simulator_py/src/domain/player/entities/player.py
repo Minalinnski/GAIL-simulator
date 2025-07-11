@@ -158,7 +158,7 @@ class Player:
         # Let strategy decide the bet and delay
         bet, delay = self.decision_engine.decide(machine_id, session_data)
 
-        # 检查投注额是否超过余额（从session_data获取）
+        # # 检查投注额是否超过余额（从session_data获取）
         current_balance = session_data.get("current_balance", 0.0)
         if bet > current_balance:
             self.logger.warning(f"投注额 {bet} 超过余额 {current_balance}, 将强制结束session...")
