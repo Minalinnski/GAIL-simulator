@@ -191,7 +191,7 @@ def main():
         simulation_results = coordinator.run_simulation(config)
         simulation_time = time.time() - simulation_start
         logger.info(f"Simulation completed in {simulation_time:.2f} seconds")
-        
+
         # Display results summary
         total_sessions = len(simulation_results["sessions"])
         total_pairs = len(simulation_results["player_machine_pairs"])

@@ -174,13 +174,14 @@ class SessionOutputManager:
             
             # 添加session级别的额外信息
             summary_data.update({
-                "session_id": self.session_id,
+                # TODO session id？
+                "session_id": (lambda x: x.split("_")[-1] if "_" in x else x)(self.session_id) if self.session_id else self.session_id,
                 "player_id": session.player.id,
                 "machine_id": session.machine.id,
                 "initial_balance": session.get_initial_balance(),
                 "final_balance": session.get_current_balance(),
                 "first_bet": session.get_first_bet(),
-                "session_duration": session.stats.duration,
+                "sim_duration": session.get_sim_duration(),
                 "timestamp": datetime.utcnow().isoformat()
             })
             

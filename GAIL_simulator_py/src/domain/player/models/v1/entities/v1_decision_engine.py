@@ -39,45 +39,45 @@ class V1DecisionEngine(BaseDecisionEngine):
         
         self.logger.debug(f"V1决策引擎初始化完成 - Cluster {self.cluster_id}")
 
-    # def calculate_first_bet(self, balance: float) -> float:
-    #     """
-    #     计算首次投注额（由Player调用，传入当前余额）
+    def calculate_first_bet(self, balance: float) -> float:
+        """
+        计算首次投注额（由Player调用，传入当前余额）
         
-    #     Args:
-    #         balance: 当前余额
+        Args:
+            balance: 当前余额
             
-    #     Returns:
-    #         首次投注额
-    #     """
-    #     try:
-    #         first_bet_config = self.config.get("first_bet_mapping", {})
-    #         if not first_bet_config:
-    #             self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - first_bet_mapping not found")
-    #             return min(1.0, balance * 0.01)
+        Returns:
+            首次投注额
+        """
+        try:
+            first_bet_config = self.config.get("first_bet_mapping", {})
+            if not first_bet_config:
+                self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - first_bet_mapping not found")
+                return min(1.0, balance * 0.01)
 
-    #         # 过滤可负担的投注选项
-    #         affordable_items = []
-    #         for bet_str, weight in first_bet_config.items():
-    #             bet_amount = float(bet_str)
-    #             if bet_amount <= balance:
-    #                 affordable_items.append((bet_amount, float(weight)))
+            # 过滤可负担的投注选项
+            affordable_items = []
+            for bet_str, weight in first_bet_config.items():
+                bet_amount = float(bet_str)
+                if bet_amount <= balance:
+                    affordable_items.append((bet_amount, float(weight)))
             
-    #         if not affordable_items:
-    #             self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - 余额 {balance} 不足以负担任何投注, 使用最小投注")
-    #             min_bet = min(float(k) for k in first_bet_config.keys())
-    #             return min(min_bet, balance)
+            if not affordable_items:
+                self.logger.warning(f"V1决策引擎 - Cluster {self.cluster_id} - 余额 {balance} 不足以负担任何投注, 使用最小投注")
+                min_bet = min(float(k) for k in first_bet_config.keys())
+                return min(min_bet, balance)
 
-    #         # 使用权重随机选择
-    #         bet_options = [item[0] for item in affordable_items]
-    #         weights = [item[1] for item in affordable_items]
+            # 使用权重随机选择
+            bet_options = [item[0] for item in affordable_items]
+            weights = [item[1] for item in affordable_items]
             
-    #         first_bet = random.choices(bet_options, weights=weights, k=1)[0]
-    #         self.logger.debug(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算完成: {first_bet} (余额: {balance})")
-    #         return float(first_bet)
+            first_bet = random.choices(bet_options, weights=weights, k=1)[0]
+            self.logger.debug(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算完成: {first_bet} (余额: {balance})")
+            return float(first_bet)
 
-    #     except Exception as e:
-    #         self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算失败: {e}")
-    #         return min(1.0, balance * 0.01)
+        except Exception as e:
+            self.logger.error(f"V1决策引擎 - Cluster {self.cluster_id} - 首次投注计算失败: {e}")
+            return min(1.0, balance * 0.01)
 
     def _initialize_model_service(self):
         """初始化模型服务"""

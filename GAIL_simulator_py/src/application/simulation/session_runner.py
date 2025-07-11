@@ -127,6 +127,8 @@ class SessionRunner:
             "final_balance": self.session.get_current_balance(),
             "initial_balance": self.session.get_initial_balance(),
             "total_profit": self.session.stats.total_profit,
+            "total_bet": self.session.stats.total_bet,
+            "total_win": self.session.stats.total_win,
             "session_stats": self.session.get_session_summary()
         }
         

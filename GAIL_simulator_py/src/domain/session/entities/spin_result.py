@@ -33,6 +33,7 @@ class SpinResult:
     # 赢线信息
     line_wins: List[float] = field(default_factory=list)
     line_wins_info: List[Dict[str, Any]] = field(default_factory=list)
+    scatter_count: int = 0
     scatter_win: float = 0.0
     
     # 用于分析的辅助字段

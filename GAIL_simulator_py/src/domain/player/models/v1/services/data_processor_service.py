@@ -133,7 +133,7 @@ class DataProcessorService:
             # 从session_data提取基本信息
             self.logger.debug(f"Session Data: {session_data}")
             current_balance = session_data.get('current_balance', 1000.0)
-            prev_balance = session_data.get('start_balance', 1000.0)
+            prev_balance = session_data.get('initial_balance', 1000.0)
             total_profit = session_data.get('total_profit', 0.0)
 
             results = session_data.get('results', [])
@@ -155,7 +155,7 @@ class DataProcessorService:
                 prev_result = results[-2]
                 prev_bet = prev_result.get('bet', 1.0) 
                 prev_profit = prev_result.get('profit', 0) 
-                # prev_balance = prev_result.get('balance_before', prev_balance)
+                prev_balance = prev_result.get('balance_before', prev_balance)
 
             # 构建8维基础特征向量
             base_features = [
