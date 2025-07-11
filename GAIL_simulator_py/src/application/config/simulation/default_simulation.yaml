@@ -71,7 +71,7 @@ output:
     use_s3: true
     bucket: "bituslabs-team-ai"
     region: "us-west-2"
-    prefix: "gail_simulator_data_raw"
+    prefix: "gail_simulator_data_raw/results_fixed"
   
   # 会话数据记录
   session_recording:
@@ -90,8 +90,8 @@ output:
     generate_reports: true
     include:
       summary_report: true
-      player_preference_report: true
-      machine_performance_report: true
+      player_preference_report: false
+      machine_performance_report: false
       detailed_session_report: false
   
   # 界面反馈

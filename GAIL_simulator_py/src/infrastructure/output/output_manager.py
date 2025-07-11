@@ -35,7 +35,7 @@ class OutputManager:
                 "use_s3": False,
                 "bucket": "bituslabs-team-ai",  # S3 Bucket 名称
                 "region": "us-west-2",        # Bucket 所在区域
-                "prefix": "gail_simulator_data_raw",
+                "prefix": "gail_simulator_data_raw/results",
             },
             "session_recording": {
                 "enabled": True,
@@ -207,208 +207,114 @@ class OutputManager:
             
         return os.path.join(self.task_dir, "reports")
 
-    def write_session_summary(self, session_id: str, data: Dict[str, Any]) -> str:
+    def finalize_all_summaries(self) -> Dict[str, str]:
         """
-        写入会话摘要到临时目录
+        合并所有player-machine对的临时summary文件到最终CSV
         
-        Args:
-            session_id: 会话ID (格式: player_id_machine_id_session_num)
-            data: 摘要数据
-            
         Returns:
-            文件路径
+            包含所有合并文件路径的字典 {pair_key: file_path}
         """
-        if not self.config["session_recording"]["enabled"]:
-            return None
-            
-        # 写入到临时目录
-        temp_dir = self.get_temp_summary_directory()
-        filepath = os.path.join(temp_dir, f"{session_id}_summary.json")
-        
-        self._write_formatted_json(filepath, data)
-        self.logger.debug(f"Wrote session summary to temp: {filepath}")
-        return filepath
-        
-    def write_session_raw_data_csv(self, session_id: str, spins_data: List[Any]) -> str:
-        """
-        写入会话原始spin数据为CSV格式到cluster/table/raw_data目录
-        
-        Args:
-            session_id: 会话ID
-            spins_data: spin数据列表
-            
-        Returns:
-            文件路径
-        """
-        if not self.config["session_recording"]["enabled"] or not spins_data:
-            self.logger.debug(f"Skipping raw data write: enabled={self.config['session_recording']['enabled']}, data_count={len(spins_data) if spins_data else 0}")
-            return None
-            
-        # 解析session_id
-        player_id, machine_id = self._parse_session_id(session_id)
-        self.logger.debug(f"Writing raw data for session {session_id}: player='{player_id}', machine='{machine_id}'")
-            
-        # 写入到cluster/table/raw_data目录
-        raw_data_dir = self.get_cluster_table_directory(player_id, machine_id, "raw_data")
-        filepath = os.path.join(raw_data_dir, f"{session_id}_raw.csv")
-        
-        self.logger.debug(f"Raw data file path: {filepath}")
-        
-        # 动态获取CSV字段
-        if not spins_data:
-            return None
-            
-        first_item = spins_data[0]
-        
-        # 检查第一个项目是SpinResult对象还是字典
-        if hasattr(first_item, 'to_dict'):
-            first_dict = first_item.to_dict()
-            csv_fields = list(first_dict.keys())
-        elif isinstance(first_item, dict):
-            csv_fields = list(first_item.keys())
-        else:
-            csv_fields = [attr for attr in dir(first_item) 
-                         if not attr.startswith('_') and not callable(getattr(first_item, attr))]
-        
         try:
-            with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=csv_fields)
-                writer.writeheader()
-                
-                for spin_data in spins_data:
-                    # 处理不同类型的输入数据
-                    if hasattr(spin_data, 'to_dict'):
-                        data_dict = spin_data.to_dict()
-                    elif isinstance(spin_data, dict):
-                        data_dict = spin_data
-                    else:
-                        data_dict = {field: getattr(spin_data, field, '') for field in csv_fields}
-                    
-                    # 处理复杂字段（转为字符串）
-                    row_data = {}
-                    for field in csv_fields:
-                        value = data_dict.get(field, '')
-                        
-                        if isinstance(value, (list, dict)):
-                            row_data[field] = json.dumps(value, ensure_ascii=False)
-                        else:
-                            row_data[field] = value
-                            
-                    writer.writerow(row_data)
-                    
-            self.logger.debug(f"Wrote {len(spins_data)} spin records to {filepath}")
-
-            if self.s3:
-                rel_path = os.path.relpath(filepath, self.task_dir)
-                self.s3.upload_file(filepath, os.path.join(self.task_dir, rel_path))
-                self.logger.info(f"Uploaded raw data CSV to S3: {rel_path}")
-
-                # 删除本地文件
-                try:
-                    os.remove(filepath)
-                    self.logger.debug(f"Deleted local raw data CSV: {filepath}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to delete local file {filepath}: {str(e)}")
-
-                return rel_path  # 返回 s3 相对路径
-            else:
-                return filepath
+            # 获取所有临时summary文件
+            temp_dir = self.get_temp_summary_directory()
+            
+            if not os.path.exists(temp_dir):
+                self.logger.warning("Temp summary directory does not exist")
+                return {}
+            
+            # 解析所有文件找到player-machine对
+            pairs = set()
+            for filename in os.listdir(temp_dir):
+                if filename.endswith('_summary.json'):
+                    # 从文件名解析player_id和machine_id
+                    parts = filename.replace('_summary.json', '').split('_')
+                    if len(parts) >= 3:
+                        # 假设格式：player_id_machine_id_session_num
+                        session_num = parts[-1]
+                        machine_id = parts[-2]
+                        player_id = '_'.join(parts[:-2])
+                        pairs.add((player_id, machine_id))
+            
+            self.logger.info(f"Found {len(pairs)} player-machine pairs for summary finalization")
+            
+            # 为每个pair合并summary
+            merged_files = {}
+            for player_id, machine_id in pairs:
+                pair_key = f"{player_id}_{machine_id}"
+                merged_file = self._merge_temp_summaries_for_pair(player_id, machine_id)
+                if merged_file:
+                    merged_files[pair_key] = merged_file
+                    self.logger.debug(f"Merged summaries for {pair_key}: {merged_file}")
+            
+            self.logger.info(f"Successfully merged summaries for {len(merged_files)} pairs")
+            return merged_files
             
         except Exception as e:
-            self.logger.error(f"Error writing CSV file {filepath}: {str(e)}")
-            import traceback
-            self.logger.error(f"Traceback: {traceback.format_exc()}")
-            return None
-    
-    def append_player_machine_session_summary(self, player_id: str, machine_id: str, 
-                                             session_summary: Dict[str, Any]) -> str:
+            self.logger.error(f"Error finalizing all summaries: {str(e)}")
+            return {}
+
+    def _merge_temp_summaries_for_pair(self, player_id: str, machine_id: str) -> Optional[str]:
         """
-        将会话摘要追加到cluster/table/summary目录的汇总文件
-        
-        Args:
-            player_id: 玩家ID (cluster)
-            machine_id: 机器ID (table)
-            session_summary: 会话摘要数据
-            
-        Returns:
-            文件路径
-        """
-        # 写入到cluster/table/summary目录
-        summary_dir = self.get_cluster_table_directory(player_id, machine_id, "summary")
-        filepath = os.path.join(summary_dir, "sessions_summary.json")
-        
-        # 读取现有数据或创建新的
-        sessions_data = []
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r', encoding='utf-8') as f:
-                    sessions_data = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError):
-                sessions_data = []
-        
-        # 添加新的会话摘要
-        sessions_data.append(session_summary)
-        
-        # 写入更新后的数据
-        self._write_formatted_json(filepath, sessions_data)
-        
-        self.logger.debug(f"Appended session summary to {filepath}")
-        return filepath
-    
-    def merge_temp_summaries_to_csv(self, player_id: str, machine_id: str) -> str:
-        """
-        将临时summary文件合并成一个大CSV放在cluster/table/summary目录下
+        将特定player-machine对的临时summary文件合并成最终CSV
         
         Args:
             player_id: 玩家ID
             machine_id: 机器ID
             
         Returns:
-            合并后的CSV文件路径
+            合并后的CSV文件路径或S3相对路径
         """
-        # 找到所有相关的临时summary文件
-        temp_dir = self.get_temp_summary_directory()
-        session_prefix = f"{player_id}_{machine_id}_"
-        
-        temp_files = []
-        for filename in os.listdir(temp_dir):
-            if filename.startswith(session_prefix) and filename.endswith('_summary.json'):
-                temp_files.append(os.path.join(temp_dir, filename))
-        
-        if not temp_files:
-            self.logger.warning(f"No temp summary files found for {player_id}_{machine_id}")
-            return None
-        
-        self.logger.info(f"Found {len(temp_files)} temp summary files for {player_id}_{machine_id}")
-        
-        # 读取所有summary数据
-        all_summaries = []
-        for temp_file in temp_files:
-            try:
-                with open(temp_file, 'r', encoding='utf-8') as f:
-                    summary_data = json.load(f)
-                    all_summaries.append(summary_data)
-            except Exception as e:
-                self.logger.error(f"Error reading temp file {temp_file}: {str(e)}")
-                continue
-        
-        if not all_summaries:
-            return None
-        
-        # 写入合并后的CSV
-        summary_dir = self.get_cluster_table_directory(player_id, machine_id, "summary")
-        csv_filepath = os.path.join(summary_dir, f"{player_id}_{machine_id}_sessions_summary.csv")
-        
-        # 获取所有字段名
-        all_fields = set()
-        for summary in all_summaries:
-            all_fields.update(summary.keys())
-        
-        csv_fields = sorted(list(all_fields))
-        
         try:
-            with open(csv_filepath, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=csv_fields)
+            # 找到所有相关的临时summary文件
+            temp_dir = self.get_temp_summary_directory()
+            session_prefix = f"{player_id}_{machine_id}_"
+            
+            temp_files = []
+            for filename in os.listdir(temp_dir):
+                if filename.startswith(session_prefix) and filename.endswith('_summary.json'):
+                    temp_files.append(os.path.join(temp_dir, filename))
+            
+            if not temp_files:
+                self.logger.warning(f"No temp summary files found for {player_id}_{machine_id}")
+                return None
+            
+            # 按文件名排序确保session顺序
+            temp_files.sort()
+            
+            self.logger.info(f"Found {len(temp_files)} temp summary files for {player_id}_{machine_id}")
+            
+            # 读取所有summary数据
+            all_summaries = []
+            for temp_file in temp_files:
+                try:
+                    with open(temp_file, 'r', encoding='utf-8') as f:
+                        summary_data = json.load(f)
+                        all_summaries.append(summary_data)
+                except Exception as e:
+                    self.logger.error(f"Error reading temp file {temp_file}: {str(e)}")
+                    continue
+            
+            if not all_summaries:
+                self.logger.error(f"No valid summary data found for {player_id}_{machine_id}")
+                return None
+            
+            # 如果使用S3，直接上传而不保存本地文件
+            if self.s3:
+                # 构造S3路径（相对于task_dir）
+                task_dir_name = os.path.basename(self.task_dir)
+                s3_rel_path = f"{task_dir_name}/{player_id}/{machine_id}/summary/{player_id}_{machine_id}_sessions_summary.csv"
+                
+                # 创建CSV内容
+                all_fields = set()
+                for summary in all_summaries:
+                    all_fields.update(summary.keys())
+                
+                csv_fields = sorted(list(all_fields))
+                
+                # 构建CSV内容字符串
+                import io
+                csv_content = io.StringIO()
+                writer = csv.DictWriter(csv_content, fieldnames=csv_fields)
                 writer.writeheader()
                 
                 for summary in all_summaries:
@@ -423,25 +329,58 @@ class OutputManager:
                             row_data[field] = value
                     
                     writer.writerow(row_data)
+                
+                # 上传到S3
+                csv_bytes = csv_content.getvalue().encode('utf-8')
+                self.s3.upload_bytes(csv_bytes, s3_rel_path)
+                self.logger.info(f"Uploaded merged summary CSV to S3: {s3_rel_path}")
+                
+                return s3_rel_path
             
-            self.logger.info(f"Merged {len(all_summaries)} summaries to {csv_filepath}")
-            if self.s3:
-                rel_path = os.path.relpath(csv_filepath, self.task_dir)
-                self.s3.upload_file(filepath, os.path.join(self.task_dir, rel_path))
-                self.logger.info(f"Uploaded merged summary CSV to S3: {rel_path}")
-
-            # 删除临时文件
-            for temp_file in temp_files:
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    self.logger.warning(f"Failed to remove temp file {temp_file}: {str(e)}")
-            
-            return csv_filepath
+            else:
+                # 本地存储
+                summary_dir = self.get_cluster_table_directory(player_id, machine_id, "summary")
+                csv_filepath = os.path.join(summary_dir, f"{player_id}_{machine_id}_sessions_summary.csv")
+                
+                # 获取所有字段名
+                all_fields = set()
+                for summary in all_summaries:
+                    all_fields.update(summary.keys())
+                
+                csv_fields = sorted(list(all_fields))
+                
+                with open(csv_filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=csv_fields)
+                    writer.writeheader()
+                    
+                    for summary in all_summaries:
+                        # 处理复杂字段
+                        row_data = {}
+                        for field in csv_fields:
+                            value = summary.get(field, '')
+                            
+                            if isinstance(value, (list, dict)):
+                                row_data[field] = json.dumps(value, ensure_ascii=False)
+                            else:
+                                row_data[field] = value
+                        
+                        writer.writerow(row_data)
+                
+                self.logger.info(f"Merged {len(all_summaries)} summaries to {csv_filepath}")
+                return csv_filepath
             
         except Exception as e:
-            self.logger.error(f"Error writing merged CSV {csv_filepath}: {str(e)}")
+            self.logger.error(f"Error merging temp summaries for {player_id}_{machine_id}: {str(e)}")
             return None
+        finally:
+            # 清理临时文件
+            if self.config.get("auto_cleanup", False):
+                for temp_file in temp_files:
+                    try:
+                        os.remove(temp_file)
+                        self.logger.debug(f"Removed temp file: {temp_file}")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to remove temp file {temp_file}: {str(e)}")
         
     def write_report(self, report_name: str, data: Dict[str, Any]) -> str:
         """写入报告。"""

@@ -212,7 +212,7 @@ class GamingSession:
                 data={
                     "end_time": self.sim_end_time,
                     "duration": self.stats.duration,
-                    "sim_duration": self.sim_duration,
+                    "sim_duration": sim_duration,
                     "final_balance": self.session_balance,
                     "total_spins": self.stats.total_spins,
                     "total_profit": self.stats.total_win - self.stats.total_bet
